@@ -1,21 +1,21 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com/?font=Unbounded&size=36&pause=1000&color=4C8BF5&center=true&vCenter=true&width=700&lines=MLSAC;Modern+Minecraft+Anti-Cheat" alt="Typing SVG" />
+<img src="https://readme-typing-svg.demolab.com/?font=Unbounded&size=36&pause=1000&color=4C8BF5&center=true&vCenter=true&width=700&lines=WALRUS;Modern+Minecraft+Anti-Cheat" alt="Typing SVG" />
 
 <br/>
 
 <p align="center">
-  🚀 <b>MLSAC</b> is a modern, fast, and intelligent anti-cheat for Minecraft servers.  
+  🚀 <b>WALRUS</b> is a modern, fast, and intelligent anti-cheat for Minecraft servers.</b> fork of MLSAC
   <br/>
   🧠 Built around behavioral analysis rather than just mathematically based checks.
 </p>
 
 <p align="center">
-  <a href="https://github.com/MLSAC/client-side/issues">Report Bug</a>
+  <a href="https://github.com/KlovyEuV2new/walrus/issues">Report Bug</a>
   ·
-  <a href="https://github.com/MLSAC/client-side/issues">Request Feature</a>
+  <a href="https://github.com/KlovyEuV2new/walrus/issues">Request Feature</a>
   ·
-  <a href="https://discord.gg/ARVNGSTWeg">Discord</a>
+  <a href="https://dsc.gg/walrus">Discord</a>
 </p>
 
 <p align="center">
@@ -48,4 +48,4 @@
 ## 📥 Downloads
 
 Official builds are available via  
-👉 **[GitHub Releases](https://github.com/MLSAC/client-side/releases)**
+👉 **[GitHub Releases](https://github.com/KlovyEuV2new/walrus/releases)**
