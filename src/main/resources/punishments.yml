@@ -1,0 +1,30 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║              MLSAC - punishments.yml                        ║
+# ║         Punishments for regular (non-ML/AI) checks          ║
+# ╚══════════════════════════════════════════════════════════════╝
+#
+# Format:
+#
+#   <group_name>:
+#     checks:
+#       - CheckName        # names from @CheckData(name = "...")
+#     punishments:
+#       - "<vl>:<command>" # command executed from the console
+#
+# Placeholders in commands:
+#   {player}  - player's nickname
+#   {check}   - check name
+#   {vl}      - current violation level
+#   {buffer}  - current buffer
+#
+# Notes:
+#   - One check can belong to only one group
+#   - VL is cumulative (does not reset on each trigger)
+#   - Commands are executed once when the required VL is reached
+
+aim:
+  checks:
+    - AimA
+  punishments: []
+    #- "9999:warn {player} [MLSAC] Подозрительное поведение прицела ({check})"
+    #- "15:kick {player} §c[MLSAC] Обнаружен AimAssist. Пересмотрите своё поведение."

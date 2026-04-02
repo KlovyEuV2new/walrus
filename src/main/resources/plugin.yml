@@ -1,0 +1,43 @@
+name: Walrus
+version: '${version}'
+main: wtf.walrus.Main
+api-version: '1.13'
+description: "MLSAC.WTF - Buy API"
+folia-supported: true
+
+commands:
+  walrus:
+    description: MLSAC anticheat and data collection commands
+    usage: |
+      /walrus start <NICK> <CHEAT|LEGIT|UNLABELED> "<comment>"
+      /walrus stop <NICK>
+      /walrus alerts - Toggle alerts
+      /walrus prob <player> - Show player probability
+      /walrus reload - Reload config
+    permission: walrus.commands
+    aliases: [ml]
+
+permissions:
+  walrus.admin:
+    description: Allows use of all MLSAC commands
+    default: op
+    children:
+      walrus.alerts: true
+      walrus.prob: true
+      walrus.reload: true
+      walrus.collect: true
+  walrus.commands:
+    description: Allows use of MLSAC commands
+    default: op
+  walrus.alerts:
+    description: Allows toggling AI alerts
+    default: op
+  walrus.prob:
+    description: Allows probability tracking
+    default: op
+  walrus.reload:
+    description: Allows config reload
+    default: op
+  walrus.collect:
+    description: Allows data collection
+    default: op

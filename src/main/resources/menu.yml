@@ -1,0 +1,43 @@
+# Configuration for Suspects GUI
+gui:
+  title: "&8Курятник"
+  size: 54
+  items:
+    suspect_head:
+      name: "&#00E5FF▶ &f{PLAYER}"
+      lore:
+        - ""
+        - " &#86EAF2Последние проверки:  &8({HISTORY_SIZE}/20)"
+        - " &a{PROB_1} {PROB_2} {PROB_3} {PROB_4} {PROB_5} {PROB_6} {PROB_7}&r"
+        - " &a{PROB_8} {PROB_9} {PROB_10} {PROB_11} {PROB_12} {PROB_13} {PROB_14}&r"
+        - " &a{PROB_15} {PROB_16} {PROB_17} {PROB_18} {PROB_19} {PROB_20}&r"
+        - ""
+        - " &#86EAF2Средний риск:"
+        - " &#FFAD3FAVG {AVG_PROB}"
+        - ""
+        - " &#86EAF2Последний сервер:"
+        - " &f1"
+        - ""
+        - " &#86EAF2Последний удар:"
+        - " &f{LAST_HIT} сек."
+        - ""
+        - " &#00E5FF▶ &7Нажмите &8[Пкм]&7, чтобы следить"
+        - " &8Лкм, что-бы телепортироваться"
+        #- "&7DB Detections: {DETECTIONS} {PROB_1}"
+        #- "&7History (Last {HISTORY_SIZE}):"
+        #- "{HISTORY}"
+        #- "&8&m------------------------"
+        #- "&eLeft-Click to Teleport"
+        #- "&eRight-Click to TP + GM3"
+    previous_page:
+      material: ARROW
+      name: "&#00E5FF▶ &7Предыдущая страница (&f{PAGE}&7)"
+    next_page:
+      material: ARROW
+      name: "&#00E5FF▶ &7Следующая страница (&f{PAGE}&7)"
+    page_info:
+      material: PAPER
+      name: "&#00E5FF▶ &7Страница &f{CURRENT} &8/ &f{TOTAL}"
+    filler:
+      material: GRAY_STAINED_GLASS_PANE
+      name: " "

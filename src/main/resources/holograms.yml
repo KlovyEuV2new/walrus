@@ -1,0 +1,12 @@
+# Configuration for Suspect Nametags (ArmorStands)
+nametags:
+  enabled: true
+  format: "&f{HISTORY}{NL}&fAVG: {AVG_COLORED}"
+  height_offset: 2.3
+  update_interval_ticks: 1
+  colors:
+    low: "&#00FF00"           # < 0.5
+    medium: "&#a1c422"  # 0.5 - 0.6
+    high: "&#F0EE0E"    # 0.6 - 0.8
+    critical: "&#FF6F00"      # 0.8 - 0.9
+    critical_bold: "&#B80000" # >= 0.9

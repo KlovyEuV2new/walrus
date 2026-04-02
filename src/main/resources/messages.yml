@@ -1,0 +1,67 @@
+prefix: "&#6A4EEEᴡᴀʟʀᴜs &f» &r"
+
+alerts-enabled: "&fОповещения &aвключены"
+alerts-disabled: "&fОповещения &cвыключены"
+alert-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAМодель: &f{MODEL}"
+default-alert-format: "&f{PLAYER} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAVL: &f{VL} &7| &#997EFAПроверка: &f{CHECK} &8{VERBOSE}"
+alert-format-vl: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &cVL: {VL}"
+
+unknown-command: "&fКоманда &c{ARGS} &fне найдена."
+players-only: "&cЭта команда предназначена только для игроков."
+no-permission: "&cУ вас недостаточно прав."
+player-not-found: "&fИгрок &cне найден&f."
+config-reloaded: "&fКонфигурация &aобновлена&f."
+
+upload-started: "&eАрхивирование &f{COUNT} &eфайлов, подождите..."
+upload-success: "&a&lДатасет загружен!\n&7Файл: &f{FILE} &7({SIZE} MB)\n&7Ссылка: &b{URL}"
+upload-failed: "&cОшибка загрузки: &f{ERROR}"
+upload-no-files: "&cНет CSV файлов в: &f{PATH}"
+upload-no-local: "&cLocal mode не включён! Установи &fdetection.local-mode: true &cв config.yml"
+
+tracking-stopped: "&fОтслеживание &aзавершено&f. Обучить античит - &#B131FF/walrus train&f."
+tracking-started: "&fНачато слежение за &a{PLAYER}&f. Используйте &#B131FF/walrus prob &fдля слежения."
+prob-usage: "&fИспользуйте: &#B131FF/walrus prob &7[&6ник&7]"
+player-offline: "&cИгрок не найден."
+
+actionbar-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAVL: &f{VL}"
+
+data-status-header: "&7=== &fСтатус датасетов &7==="
+active-sessions: "&7Активные записи: &6{COUNT}"
+no-active-sessions: "&7Активные записи &cне найдены..."
+start-hint: "&fНачать слежение за игроком &#B131FF/walrus start &7[&6ник&7] [&6CHEAT&x&0&0&d&5&f&b | &6LEGIT&x&0&0&d&5&f&b | &6UNLABELED&7]"
+session-started: "&fНачато слежение за &a{LABEL} &fдля &a{COUNT} &fигрок(-ов)."
+session-stopped: "&fСлежение остановлено &a{PLAYER}."
+all-sessions-stopped: "&fОстановлено &c{COUNT} &fзаписей."
+no-sessions-to-stop: "&7Нет активных сессий для остановки."
+no-players-online: "&cНет игроков онлайн"
+invalid-label: "&cНедопустимая метка: &f{LABEL}"
+valid-labels: "&fДоступные этикетки: &aCHEAT, LEGIT, UNLABELED"
+
+usage-header: "&fИспользование:"
+usage-start: "&7  /walrus start <NICK|GLOBAL> <CHEAT|LEGIT|UNLABELED> \"<comment>\""
+usage-stop: "&7  /walrus stop <NICK|GLOBAL>"
+usage-trash: "&7  /walrus trash <NICK|GLOBAL>"
+usage-alerts: "&7  /walrus alerts - Toggle AI alerts"
+usage-prob: "&7  /walrus prob <player> - Track probability (actionbar)"
+usage-datastatus: "&7  /walrus datastatus - Data collection status"
+usage-reload: "&7  /walrus reload - Reload configuration"
+usage-suspects: "&7  /walrus suspects - Open the suspects GUI"
+usage-punish: "&7  /walrus punish <player> - Execute max punishment"
+usage-profile: "&7  /walrus profile <player> - View player profile"
+
+suspects-teleport: "&7Начато слежение за {PLAYER}"
+suspects-teleport-spectator: "&7Телепортация к &a{PLAYER} &7в режиме наблюдения"
+suspects-player-offline: "&cИгрок находится не в сети."
+
+punish-success: "&fВы наказали игрока &a{PLAYER}."
+punish-no-action: "&cМетод наказания отсутсвует в конфигурации."
+
+profile-header: "&7=== &fПрофиль: &a{PLAYER} &7==="
+profile-info:
+  - "&f"
+  - "&fЧувствительность: &6{SENS}%"
+  - "&fКлиент: &6{CLIENT}"
+  - "&fКол-во детектов (»0.8): &6{DETECTIONS}"
+  - "&f"
+
+analytics-join-alert: "Игрок, найденный в базе данных &a{PLAYER} &7({DETECTIONS_COLORED}&7)"

@@ -1,0 +1,237 @@
+# ╔═══════════════════════════════════════════════════════════════════════════════╗
+# ║                           MLSAC Configuration                                 ║
+# ║                    ML Anti-Cheat with AI Detection                            ║
+# ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                            GENERAL SETTINGS                                   │
+# └───────────────────────────────────────────────────────────────────────────────┘
+
+# Enable debug mode for additional console output
+debug: false
+
+# Directory for saving data files (legacy, actual storage is always mls/data/)
+outputDirectory: "data"
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                            DETECTION SETTINGS                                 │
+# └───────────────────────────────────────────────────────────────────────────────┘
+# Guide https://mlsac.wtf/dashboard/wiki
+detection:
+  # Enable AI-based cheat detection
+  enabled: true
+
+  # ┌─────────────────────────────────────────────────────────────────────────────┐
+  # │                          LOCAL ML MODE                                      │
+  # │                                                                             │
+  # │  When local-mode is true, the plugin uses a built-in logistic regression   │
+  # │  model instead of the remote SignalR server. No api-key or endpoint needed. │
+  # │                                                                             │
+  # │  Workflow:                                                                  │
+  # │    1. Collect data:  /walrus start <player> CHEAT|LEGIT                     │
+  # │                      /walrus stop <player>                                   │
+  # │       CSV files are saved to: <plugin>/mls/data/                           │
+  # │                                                                             │
+  # │    2. Train model:   /walrus train [epochs]    (default: 50 epochs)         │
+  # │       Trained weights: <plugin>/mls/local.bin                              │
+  # │                                                                             │
+  # │    3. Check status:  /walrus localstatus                                    │
+  # │                                                                             │
+  # │  Tips:                                                                      │
+  # │    - Collect at least 100+ ticks of CHEAT and LEGIT data before training   │
+  # │    - More data = better accuracy                                            │
+  # │    - Re-train after collecting new data                                     │
+  # │    - Model auto-saves on server shutdown                                    │
+  # └─────────────────────────────────────────────────────────────────────────────┘
+  local-mode: true
+
+  # AI server endpoint (ignored when local-mode: true)
+  endpoint: "https://api.mlsac.wtf"
+
+  # API key for authentication (ignored when local-mode: true)
+  # To buy API key visit https://mlsac.wtf/dashboard
+  # Free trial up to 3 days is also available in dashboard
+  api-key: "your-api-key"
+
+  # Number of ticks to collect per sample
+  # Do not change unless you know what you are doing
+  sample-size: 40
+
+  # Interval between samples (in ticks)
+  # Do not change unless you know what you are doing
+  sample-interval: 10
+
+  # WorldGuard integration for region-based AI check bypass.
+  # Priority system: If player is in multiple regions, the highest priority region
+  # determines if AI check is disabled.
+  # Example: Player in "spawn" (priority 0) and "pvp" (priority 10)
+  # If "spawn" is disabled but "pvp" is not - AI check WILL run (pvp has higher priority)
+  worldguard:
+    # Enable WorldGuard region checking?
+    enabled: true
+    # List of regions where AI check is disabled.
+    # Format: "world:region" or just "region" (applies to all worlds)
+    disabled-regions:
+      - "spawn:spawn"
+
+  # Smart damage cancellation that depends on the probability
+  damage-verdict: true
+
+  # Model settings (remote mode only — ignored when local-mode: true)
+  # Each model can have:
+  #   name: Display name shown in alerts
+  #   only-alert: When true, alerts are sent but NO punishments for this model
+  models:
+    fast:
+      name: "Fast-A1"
+      only-alert: false   # Stable model - punishments enabled
+    pro:
+      name: "Pro-A1"
+      only-alert: true    # Newest model - testing mode - no punishments
+    ultra:
+      name: "Ultra-A1"
+      only-alert: true    # Model in development - testing mode - no punishments
+    experimental:
+      name: "Experimental"
+      only-alert: true    # Test model - testing mode - no punishments
+    # local model display name (used when local-mode: true)
+    local:
+      name: "Local"
+      only-alert: false
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                              CHECK SETTINGS                                   │
+# └───────────────────────────────────────────────────────────────────────────────┘
+checks:
+  AimA:
+    enabled: true
+    alert-per: 5
+    vl-decay: 120
+  # other checks
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                              ALERT SETTINGS                                   │
+# └───────────────────────────────────────────────────────────────────────────────┘
+# Guide https://mlsac.wtf/dashboard/wiki
+alerts:
+  # Probability threshold for sending alerts (0.0 - 1.0)
+  threshold: 0.75
+
+  # Send alerts to console
+  console: false
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                            VIOLATION SETTINGS                                 │
+# └───────────────────────────────────────────────────────────────────────────────┘
+# Guide https://mlsac.wtf/dashboard/wiki
+violation:
+  # VL threshold for triggering penalties (1 = immediate penalty on first detection)
+  threshold: 40
+
+  # VL reset value after penalty (0 = full reset)
+  # reset-value should be /2 of threshold
+  reset-value: 20
+
+  one-prob-punish: false
+
+  # Buffer increase multiplier: (probability - threshold) * multiplier
+  # Example: prob 1.0 with threshold 0.70 = (1.0 - 0.70) * 100 = 30 buffer
+  multiplier: 100.0
+
+  # Buffer decay when probability < 0.1 (low probability threshold)
+  # Do not change unless you know what you are doing
+  decay: 0.35
+
+  # VL decay settings (reset VL when player is not in combat)
+  # Protects legitimate players from random false positives
+  vl-decay:
+    # Enable automatic VL decay
+    enabled: false
+    # Check interval in seconds (how often to check and reduce VL)
+    interval: 1500
+    # Amount of VL to reduce per interval
+    amount: 1
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                            PENALTY SETTINGS                                   │
+# └───────────────────────────────────────────────────────────────────────────────┘
+#
+# Available action prefixes:
+#   {BAN}          - Execute ban command
+#   {KICK}         - Execute kick command
+#   {CUSTOM_ALERT} - Send custom alert to moderators
+#   (no prefix)    - Execute raw command
+#
+# Available placeholders:
+#   {PLAYER}      - Player name
+#   {VL}          - Violation level
+#   {PROBABILITY} - Detection probability
+#   {BUFFER}      - Buffer value
+#
+# Legacy placeholders also supported: <player>, <vl>, <probability>, <buffer>
+#
+# Guide https://mlsac.wtf/dashboard/wiki
+penalties:
+  # Minimum probability required for penalty execution
+  # Do not change unless you know what you are doing
+  min-probability: 0.01
+
+  # Ban animation settings
+  # Epic animation: levitation + purple/pink particles + lightning strike
+  animation:
+    enabled: true
+    # Duration in ticks (20 ticks = 1 second)
+    duration: 80
+
+  # Actions by violation level
+  actions: []
+    #1: "{KICK} kick {PLAYER} MLSAC Detection (VL:{VL})"
+    #2: "{BAN} ban {PLAYER} Cheating (MLSAC VL:{VL})"
+    #2-0,9: "{BAN} ban {PLAYER} Cheating (MLSAC VL:{VL}) prob >0.9"
+  #
+  # Also you could use:
+  #   1: "{CUSTOM_ALERT} &c{PLAYER} &7is suspicious &8(&fVL:&e{VL}&8, &fProb:&e{PROBABILITY}&8)"
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                        ANALYTICS JOIN ALERT                                   │
+# │           (remote mode only — disabled automatically in local-mode)           │
+# └───────────────────────────────────────────────────────────────────────────────┘
+# Alert staff when a player with detections in the MLSAC database joins the server.
+# Uses the /analytics/check/<nick> API endpoint.
+analytics:
+  # Enable analytics join alerts
+  enabled: true
+  # Minimum detections required to send an alert (below this → no message)
+  min-detections: 5
+  # Detection count color thresholds
+  # detections <= green  → &a (green)
+  # detections <= orange → &6 (orange)
+  # detections > orange  → &c (red)
+  colors:
+    green: 10
+    orange: 20
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                            FOLIA SETTINGS                                     │
+# └───────────────────────────────────────────────────────────────────────────────┘
+#
+# These settings are only used when running on a Folia server.
+# On Bukkit/Paper/Spigot servers, these settings are ignored.
+#
+folia:
+  # Enable Folia-specific optimizations
+  # When disabled, the plugin will use standard Bukkit scheduler even on Folia
+  enabled: true
+
+  # Thread pool size for async tasks (0 = use Folia default)
+  thread-pool-size: 0
+
+  # Entity scheduler settings
+  # Use entity-specific schedulers for entity-related tasks
+  entity-scheduler:
+    enabled: true
+
+  # Region scheduler settings
+  # Use region-specific schedulers for location-based tasks
+  region-scheduler:
+    enabled: true
