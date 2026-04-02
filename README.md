@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com/?font=Unbounded&size=36&pause=1000&color=4C8BF5&center=true&vCenter=true&width=700&lines=MLSAC;Modern+Minecraft+Anti-Cheat" alt="Typing SVG" />
+<img src="https://readme-typing-svg.demolab.com/?font=Unbounded&size=36&pause=1000&color=4C8BF5&center=true&vCenter=true&width=700&lines=WALRUS;Modern+Minecraft+Anti-Cheat" alt="Typing SVG" />
 
 <br/>
 
