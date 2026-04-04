@@ -15,6 +15,8 @@
   ·
   <a href="https://github.com/KlovyEuV2new/walrus/issues">Request Feature</a>
   ·
+  <a href="https://github.com/MLSAC/client-side">Forked from MLSAC</a>
+  ·
   <a href="https://dsc.gg/walrus">Discord</a>
 </p>
 
