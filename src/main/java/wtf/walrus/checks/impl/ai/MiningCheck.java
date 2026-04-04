@@ -24,14 +24,13 @@
 package wtf.walrus.checks.impl.ai;
 
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import wtf.walrus.Main;
 import wtf.walrus.alert.AlertManager;
 import wtf.walrus.checks.CheckType;
 import wtf.walrus.compat.WorldGuardCompat;
 import wtf.walrus.config.Config;
-import wtf.walrus.data.AIPlayerData;
+import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.data.TickData;
 import wtf.walrus.ml.client.LocalAIClient;
 import wtf.walrus.scheduler.SchedulerAdapter;
@@ -49,7 +48,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-public class AICheck {
+public class MiningCheck {
 
     private final Main             plugin;
     private final AIClientProvider clientProvider;
@@ -57,17 +56,17 @@ public class AICheck {
     private final ViolationManager violationManager;
     private final Logger           logger;
     private final SchedulerAdapter schedulerAdapter;
-    private final Map<UUID, AIPlayerData> playerData;
+    private final Map<UUID, MiningPlayerData> playerData;
 
     private Config            config;
     private WorldGuardCompat  worldGuardCompat;
     private int               sequence;
     private int               step;
 
-    public AICheck(Main plugin, Config config,
-                   AIClientProvider clientProvider,
-                   AlertManager alertManager,
-                   ViolationManager violationManager) {
+    public MiningCheck(Main plugin, Config config,
+                       AIClientProvider clientProvider,
+                       AlertManager alertManager,
+                       ViolationManager violationManager) {
         this.plugin           = plugin;
         this.config           = config;
         this.clientProvider   = clientProvider;
@@ -94,9 +93,8 @@ public class AICheck {
                 config.getWorldGuardDisabledRegions());
     }
 
-    public void onAttack(Player player, Entity target) {
-        if (!config.isAiEnabled()) return;
-        if (!(target instanceof Player)) return;
+    public void onDig(Player player) {
+        if (!config.isAiEnabled() || !config.isMiningAiEnabled()) return;
         if (worldGuardCompat.shouldBypassAICheck(player)) {
             plugin.debug("[AI] Skipping attack for " + player.getName() + " - in disabled WorldGuard region");
             return;
@@ -104,7 +102,7 @@ public class AICheck {
         if (!player.isValid()) return;
 
         schedulerAdapter.runEntitySync(player, () -> {
-            AIPlayerData data = getOrCreatePlayerData(player);
+            MiningPlayerData data = getOrCreatePlayerData(player);
             if (data.isBedrock()) {
                 plugin.debug("[AI] Skipping attack for " + player.getName() + " - Bedrock player");
                 return;
@@ -121,11 +119,11 @@ public class AICheck {
     }
 
     public void onTeleport(Player player) {
-        if (!config.isAiEnabled()) return;
+        if (!config.isAiEnabled() || !config.isMiningAiEnabled()) return;
         if (!player.isValid()) return;
 
         schedulerAdapter.runEntitySync(player, () -> {
-            AIPlayerData data = playerData.get(player.getUniqueId());
+            MiningPlayerData data = playerData.get(player.getUniqueId());
             if (data != null) {
                 data.onTeleport();
                 plugin.debug("[AI] Teleport for " + player.getName() + ", resetting data");
@@ -134,12 +132,12 @@ public class AICheck {
     }
 
     public void onTick(Player player) {
-        if (!config.isAiEnabled()) return;
+        if (!config.isAiEnabled() || !config.isMiningAiEnabled()) return;
         if (!isClientAvailable()) return;
         if (!player.isValid()) return;
 
         schedulerAdapter.runEntitySync(player, () -> {
-            AIPlayerData data = getOrCreatePlayerData(player);
+            MiningPlayerData data = getOrCreatePlayerData(player);
             if (data.isBedrock()) return;
 
             data.incrementTicksSinceAttack();
@@ -162,12 +160,12 @@ public class AICheck {
     }
 
     public void onRotationPacket(Player player, float yaw, float pitch) {
-        if (!config.isAiEnabled()) return;
+        if (!config.isAiEnabled() || !config.isMiningAiEnabled()) return;
         if (!isClientAvailable()) return;
         if (!player.isValid()) return;
 
         schedulerAdapter.runEntitySync(player, () -> {
-            AIPlayerData data = playerData.get(player.getUniqueId());
+            MiningPlayerData data = playerData.get(player.getUniqueId());
             if (data == null) return;
             if (!data.isInCombat()) return;
             if (worldGuardCompat.shouldBypassAICheck(player)) {
@@ -194,7 +192,7 @@ public class AICheck {
         }
     }
 
-    private void sendDataToAI(Player player, AIPlayerData data) {
+    private void sendDataToAI(Player player, MiningPlayerData data) {
         try {
             List<TickData> ticks = data.getTickBuffer();
             if (ticks.size() < sequence) {
@@ -245,7 +243,7 @@ public class AICheck {
     }
 
     private void processResponse(UUID playerUuid, String playerName,
-                                 AIPlayerData data, AIResponse response) {
+                                 MiningPlayerData data, AIResponse response) {
         schedulerAdapter.runSync(() -> {
             data.setPendingRequest(false);
             data.clearBuffer();
@@ -277,13 +275,13 @@ public class AICheck {
             }
 
             if (alertManager.shouldAlert(probability)) {
-                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName, CheckType.AIM);
+                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName, CheckType.DIG);
             }
 
             if (!isOnlyAlert && data.shouldFlag(config.getAiBufferFlag())) {
                 Player player = Bukkit.getPlayer(playerUuid);
                 if (player != null && player.isOnline()) {
-                    violationManager.handleFlag(player, probability, data.getBuffer(), CheckType.AIM);
+                    violationManager.handleFlag(player, probability, data.getBuffer(), CheckType.DIG);
                 } else {
                     logger.warning("[AI] Player " + playerName
                             + " went offline before punishment");
@@ -305,7 +303,7 @@ public class AICheck {
                 if (newSequence > 0 && newSequence != this.sequence) {
                     logger.info("[AI] Updating sequence " + this.sequence + " → " + newSequence);
                     this.sequence = newSequence;
-                    playerData.values().forEach(AIPlayerData::clearBuffer);
+                    playerData.values().forEach(MiningPlayerData::clearBuffer);
                 }
             }
         } catch (NumberFormatException e) {
@@ -313,15 +311,15 @@ public class AICheck {
         }
     }
 
-    private void handleError(String playerName, AIPlayerData data, Throwable error) {
+    private void handleError(String playerName, MiningPlayerData data, Throwable error) {
         if (data != null) data.setPendingRequest(false);
         Throwable cause = error.getCause() != null ? error.getCause() : error;
         logger.warning("[AI] Error for " + playerName + ": " + cause.getMessage());
     }
 
-    public AIPlayerData getOrCreatePlayerData(Player player) {
+    public MiningPlayerData getOrCreatePlayerData(Player player) {
         return playerData.computeIfAbsent(player.getUniqueId(), uuid -> {
-            AIPlayerData d = new AIPlayerData(uuid, sequence);
+            MiningPlayerData d = new MiningPlayerData(uuid, sequence);
             if (GeyserUtil.isBedrockPlayer(uuid)) {
                 d.setBedrock(true);
                 logger.info("[AI] Bedrock player detected: " + player.getName() + " — bypassing checks");
@@ -344,7 +342,7 @@ public class AICheck {
         plugin.debug("[AI] === TICK BUFFER END ===");
     }
 
-    public AIPlayerData  getPlayerData(UUID playerId)  { return playerData.get(playerId); }
+    public MiningPlayerData  getPlayerData(UUID playerId)  { return playerData.get(playerId); }
     public int           getSequence()                  { return sequence; }
     public int           getStep()                      { return step; }
     public WorldGuardCompat getWorldGuardCompat()       { return worldGuardCompat; }

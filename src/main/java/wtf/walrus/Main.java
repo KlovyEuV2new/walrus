@@ -13,7 +13,9 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import wtf.walrus.alert.AlertManager;
+import wtf.walrus.checks.Check;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.checks.listener.CheckManagerListener;
 import wtf.walrus.commands.CommandHandler;
 import wtf.walrus.compat.VersionAdapter;
@@ -50,6 +52,7 @@ public final class Main extends JavaPlugin {
     private FeatureCalculator featureCalculator;
     private TickListener tickListener;
     private HitListener hitListener;
+    private DigListener digListener;
     private RotationListener rotationListener;
     private PlayerListener playerListener;
     private TeleportListener teleportListener;
@@ -59,8 +62,13 @@ public final class Main extends JavaPlugin {
     private ViolationManager violationManager;
     private NametagManager nametagManager;
     public AICheck aiCheck;
+    public MiningCheck miningCheck;
     private UpdateChecker updateChecker;
     private AnalyticsClient analyticsClient;
+
+    public MiningCheck getMiningCheck() {
+        return miningCheck;
+    }
 
     public TickListener getTickListener() {
         return tickListener;
@@ -73,7 +81,7 @@ public final class Main extends JavaPlugin {
     private PunishmentsConfig punishmentsConfig;
     private PunishmentManager punishmentManager;
 
-    private BListener bListener;
+    private BukkitListener bListener;
 
     @Override
     public void onLoad() {
@@ -164,32 +172,36 @@ public final class Main extends JavaPlugin {
         this.punishmentManager = new PunishmentManager(this, punishmentsConfig);
         this.violationManager = new ViolationManager(this, config, alertManager);
         this.aiCheck = new AICheck(this, config, aiClientProvider, alertManager, violationManager);
+        this.miningCheck = new MiningCheck(this, config, aiClientProvider, alertManager, violationManager);
         for (Model model : localAIClientProvider.getModels()) {
             model.reload(aiCheck);
         }
         this.violationManager.setAICheck(aiCheck);
+        this.violationManager.setMiningCheck(miningCheck);
 
-        this.nametagManager = new NametagManager(this, aiCheck);
+        this.nametagManager = new NametagManager(this, aiCheck, miningCheck);
         this.nametagManager.start();
 
-        this.tickListener = new TickListener(this, sessionManager, aiCheck, nametagManager);
+        this.tickListener = new TickListener(this, sessionManager, aiCheck, miningCheck, nametagManager);
         this.hitListener = new HitListener(sessionManager, aiCheck);
-        this.rotationListener = new RotationListener(sessionManager, aiCheck);
+        this.digListener = new DigListener(sessionManager, miningCheck);
+        this.rotationListener = new RotationListener(sessionManager, aiCheck, miningCheck);
 
         this.analyticsClient = config.isLocalModeEnabled() ? null : new AnalyticsClient(config.getServerAddress(), getLogger());
 
         this.playerListener = new PlayerListener(
-                this, aiCheck, alertManager, violationManager,
+                this, aiCheck, miningCheck, alertManager, violationManager,
                 sessionManager instanceof SessionManager ? (SessionManager) sessionManager : null,
                 tickListener, nametagManager, analyticsClient);
-        this.teleportListener = new TeleportListener(aiCheck);
+        this.teleportListener = new TeleportListener(aiCheck, miningCheck);
 
         this.tickListener.setHitListener(hitListener);
+        this.tickListener.setDigListener(digListener);
         this.playerListener.setHitListener(hitListener);
         this.hitListener.cacheOnlinePlayers();
         this.tickListener.start();
         this.checkManagerListener = new CheckManagerListener();
-        this.bListener = new BListener(this);
+        this.bListener = new BukkitListener(this);
 
         for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
             this.tickListener.startPlayerTask(p);
@@ -198,9 +210,10 @@ public final class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(playerListener, this);
         getServer().getPluginManager().registerEvents(teleportListener, this);
         PacketEvents.getAPI().getEventManager().registerListener(hitListener);
+        PacketEvents.getAPI().getEventManager().registerListener(digListener);
         PacketEvents.getAPI().getEventManager().registerListener(rotationListener);
 
-        this.commandHandler = new CommandHandler(sessionManager, alertManager, aiCheck, this);
+        this.commandHandler = new CommandHandler(sessionManager, alertManager, aiCheck, miningCheck, this);
         PluginCommand command = getCommand("walrus");
         if (command != null) {
             command.setExecutor(commandHandler);
@@ -232,6 +245,7 @@ public final class Main extends JavaPlugin {
         }
 
         if (aiCheck != null) aiCheck.clearAll();
+        if (miningCheck != null) miningCheck.clearAll();
         if (commandHandler != null) commandHandler.cleanup();
 
         if (aiClientProvider != null) {
@@ -272,8 +286,16 @@ public final class Main extends JavaPlugin {
                 alertManager.setConfig(config);
                 violationManager.setConfig(config);
                 aiCheck.setConfig(config);
+                miningCheck.setConfig(config);
                 for (Model model : localAIClientProvider.getModels()) {
                     model.reload(aiCheck);
+                }
+
+                for (WalrusPlayer player : WalrusPlayer.getPlayers()) {
+                    for (Check check : player.checkManager.getChecks().values()) {
+                        check.loadConfig();
+                        check.onReload(getConfig());
+                    }
                 }
 
                 if (aiClientProvider != null) {
@@ -332,7 +354,11 @@ public final class Main extends JavaPlugin {
         return checkManagerListener;
     }
 
-    public BListener getbListener() {
+    public BukkitListener getbListener() {
         return bListener;
+    }
+
+    public DigListener getDigListener() {
+        return digListener;
     }
 }

@@ -13,6 +13,8 @@ import wtf.walrus.checks.impl.aim.states.AimStaticB;
 import wtf.walrus.checks.impl.badpackets.BadPacketsA;
 import wtf.walrus.player.WalrusPlayer;
 
+import java.util.List;
+
 public class CheckManager {
 
     private final ClassToInstanceMap<Check> checks = MutableClassToInstanceMap.create();
@@ -22,19 +24,19 @@ public class CheckManager {
     }
 
     private void init(WalrusPlayer player) {
-        // aim
-        register(new AimA(player));
-        register(new AimB(player));
-
-        // aim static
-        register(new AimStaticA(player));
-        register(new AimStaticB(player));
-
-        // aim look
-        register(new AimSnapLook(player));
-
-        // badpackets
-        register(new BadPacketsA(player));
+//        // aim
+//        register(new AimA(player));
+//        register(new AimB(player));
+//
+//        // aim static
+//        register(new AimStaticA(player));
+//        register(new AimStaticB(player));
+//
+//        // aim look
+//        register(new AimSnapLook(player));
+//
+//        // badpackets
+//        register(new BadPacketsA(player));
     }
 
     public void onPacketReceive(PacketReceiveEvent event) {
@@ -47,6 +49,10 @@ public class CheckManager {
         for (Check check : checks.values()) {
             check.sendPacket(event);
         }
+    }
+
+    public ClassToInstanceMap<Check> getChecks() {
+        return checks;
     }
 
     public <T extends Check> void register(T instance) {

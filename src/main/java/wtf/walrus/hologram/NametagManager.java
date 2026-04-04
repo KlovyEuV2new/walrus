@@ -4,23 +4,33 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.ClientVersion;
 import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.util.adventure.AdventureSerializer;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerFlying;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import wtf.walrus.Main;
 
+import wtf.walrus.Permissions;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.HologramConfig;
 import wtf.walrus.data.AIPlayerData;
+import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 
@@ -39,6 +49,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     private final JavaPlugin plugin;
     private final AICheck aiCheck;
+    private final MiningCheck miningCheck;
 
     private final Map<UUID, int[]> armorStandIds = new ConcurrentHashMap<>();
     private final Map<UUID, String> lastSentText = new ConcurrentHashMap<>();
@@ -47,14 +58,15 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     private ScheduledTask task;
     private int cleanupCounter = 0;
 
-    public NametagManager(JavaPlugin plugin, AICheck aiCheck) {
+    public NametagManager(JavaPlugin plugin, AICheck aiCheck, MiningCheck miningCheck) {
         super(PacketListenerPriority.NORMAL);
         this.plugin = plugin;
         this.aiCheck = aiCheck;
+        this.miningCheck = miningCheck;
     }
 
     public void start() {
-        org.bukkit.configuration.file.FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
+        FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
         if (!config.getBoolean("nametags.enabled", true))
             return;
 
@@ -80,8 +92,8 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     }
 
     private boolean hasViewPermission(Player player) {
-        return player.hasPermission(wtf.walrus.Permissions.ADMIN)
-                || player.hasPermission(wtf.walrus.Permissions.ALERTS);
+        return player.hasPermission(Permissions.ADMIN)
+                || player.hasPermission(Permissions.ALERTS);
     }
 
     @Override
@@ -104,7 +116,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 return;
 
             Vector3d pos = flying.getLocation().getPosition();
-            org.bukkit.configuration.file.FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
+            FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
             double baseOffset = config.getDouble("nametags.height_offset", 2.3);
 
             Set<UUID> viewers = viewersMap.get(player.getUniqueId());
@@ -174,19 +186,24 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     }
 
     public void updateNametag(Player target, List<Player> admins) {
-        AIPlayerData data = aiCheck.getPlayerData(target.getUniqueId());
-        if (data == null)
+        AIPlayerData data = aiCheck.getOrCreatePlayerData(target);
+        MiningPlayerData miningData = miningCheck.getOrCreatePlayerData(target);
+        if (data == null || miningData == null)
             return;
 
-        org.bukkit.configuration.file.FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
+        FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
         String format = config.getString("nametags.format", "&6▶ &7AVG: &f{AVG} &8| {HISTORY} &6◀");
 
         double avgProb = data.getFormatedAverageProbability();
-        if (avgProb < 0.0001 / data.getBufferSize()) {
+        double mineAvgProb = miningData.getFormatedAverageProbability();
+
+        if (avgProb <= 0.0 && mineAvgProb <= 0.0) {
             despawnForAll(target.getUniqueId());
             return;
         }
+
         List<Double> history = data.getFormatedProbabilityHistory();
+        List<Double> mineHistory = miningData.getFormatedProbabilityHistory();
 
         String historyStr = "-";
         if (!history.isEmpty()) {
@@ -197,8 +214,20 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             historyStr = sb.toString().trim();
         }
 
+        String mineHistoryStr = "-";
+        if (!mineHistory.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (Double val : mineHistory) {
+                sb.append(getColorInfo(val)).append(" ");
+            }
+            mineHistoryStr = sb.toString().trim();
+        }
+
         String filled = format
                 .replace("{AVG}", String.format("%.4f", avgProb))
+                .replace("{MINE_AVG}", String.format("%.4f", mineAvgProb))
+                .replace("{MINE_AVG_COLORED}", getColorInfo(mineAvgProb))
+                .replace("{MINE_HISTORY}", mineHistoryStr)
                 .replace("{AVG_COLORED}", getColorInfo(avgProb))
                 .replace("{HISTORY}", historyStr);
 
@@ -275,7 +304,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             }
 
             if (isNew || textChanged) {
-                List<com.github.retrooper.packetevents.protocol.entity.data.EntityData<?>> metadata =
+                List<EntityData<?>> metadata =
                         getVersionedMetadata(viewer, lines[i]);
                 WrapperPlayServerEntityMetadata metadataPacket =
                         new WrapperPlayServerEntityMetadata(entityIds[i], metadata);
@@ -337,51 +366,51 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         }
     }
 
-    private List<com.github.retrooper.packetevents.protocol.entity.data.EntityData<?>> getVersionedMetadata(
+    private List<EntityData<?>> getVersionedMetadata(
             Player viewer, String text) {
-        List<com.github.retrooper.packetevents.protocol.entity.data.EntityData<?>> metadata = new ArrayList<>();
-        com.github.retrooper.packetevents.protocol.player.ClientVersion clientVersion = PacketEvents.getAPI()
+        List<EntityData<?>> metadata = new ArrayList<>();
+        ClientVersion clientVersion = PacketEvents.getAPI()
                 .getPlayerManager().getClientVersion(viewer);
         int version = clientVersion != null ? clientVersion.getProtocolVersion() : 770;
 
-        metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Byte>(
-                0, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.BYTE, (byte) 0x20));
+        metadata.add(new EntityData<Byte>(
+                0, EntityDataTypes.BYTE, (byte) 0x20));
 
-        net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer legacySerializer =
-                net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.builder()
+        LegacyComponentSerializer legacySerializer =
+                LegacyComponentSerializer.builder()
                         .character('&')
                         .hexColors()
                         .useUnusualXRepeatedCharacterHexFormat()
                         .build();
-        net.kyori.adventure.text.Component component = legacySerializer.deserialize(text);
+        Component component = legacySerializer.deserialize(text);
 
         if (version >= 766) {
             metadata.add(
-                    new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Optional<net.kyori.adventure.text.Component>>(
+                    new EntityData<Optional<Component>>(
                             2,
-                            com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.OPTIONAL_ADV_COMPONENT,
+                            EntityDataTypes.OPTIONAL_ADV_COMPONENT,
                             Optional.of(component)));
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Boolean>(
-                    3, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.BOOLEAN, true));
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Byte>(
-                    15, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.BYTE, (byte) 0x10));
+            metadata.add(new EntityData<Boolean>(
+                    3, EntityDataTypes.BOOLEAN, true));
+            metadata.add(new EntityData<Byte>(
+                    15, EntityDataTypes.BYTE, (byte) 0x10));
 
         } else if (version >= 393) {
-            String json = com.github.retrooper.packetevents.util.adventure.AdventureSerializer.getGsonSerializer()
+            String json = AdventureSerializer.getGsonSerializer()
                     .serialize(component);
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Optional<String>>(
-                    2, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.OPTIONAL_COMPONENT,
+            metadata.add(new EntityData<Optional<String>>(
+                    2, EntityDataTypes.OPTIONAL_COMPONENT,
                     Optional.of(json)));
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Boolean>(
-                    3, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.BOOLEAN, true));
+            metadata.add(new EntityData<Boolean>(
+                    3, EntityDataTypes.BOOLEAN, true));
 
         } else {
-            String legacyStr = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
+            String legacyStr = LegacyComponentSerializer.legacySection()
                     .serialize(component);
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<String>(
-                    2, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.STRING, legacyStr));
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Boolean>(
-                    3, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.BOOLEAN, true));
+            metadata.add(new EntityData<String>(
+                    2, EntityDataTypes.STRING, legacyStr));
+            metadata.add(new EntityData<Boolean>(
+                    3, EntityDataTypes.BOOLEAN, true));
         }
 
         if (version < 766) {
@@ -396,8 +425,8 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 else
                     markerIndex = 10;
             }
-            metadata.add(new com.github.retrooper.packetevents.protocol.entity.data.EntityData<Byte>(
-                    markerIndex, com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes.BYTE,
+            metadata.add(new EntityData<Byte>(
+                    markerIndex, EntityDataTypes.BYTE,
                     (byte) 0x10));
         }
 

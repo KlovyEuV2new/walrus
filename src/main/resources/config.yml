@@ -44,6 +44,8 @@ detection:
   # │    - Model auto-saves on server shutdown                                    │
   # └─────────────────────────────────────────────────────────────────────────────┘
   local-mode: true
+  mining:
+    enabled: true
 
   # AI server endpoint (ignored when local-mode: true)
   endpoint: "https://api.mlsac.wtf"
@@ -75,7 +77,8 @@ detection:
       - "spawn:spawn"
 
   # Smart damage cancellation that depends on the probability
-  damage-verdict: true
+  damage-verdict: false
+  dig-verdict: false
 
   # Model settings (remote mode only — ignored when local-mode: true)
   # Each model can have:
@@ -146,9 +149,9 @@ violation:
   # Protects legitimate players from random false positives
   vl-decay:
     # Enable automatic VL decay
-    enabled: false
+    enabled: true
     # Check interval in seconds (how often to check and reduce VL)
-    interval: 1500
+    interval: 60
     # Amount of VL to reduce per interval
     amount: 1
 

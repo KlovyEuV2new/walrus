@@ -36,6 +36,7 @@ import wtf.walrus.Main;
 import wtf.walrus.Permissions;
 import wtf.walrus.alert.AlertManager;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.MessagesConfig;
 import wtf.walrus.scheduler.SchedulerManager;
@@ -47,6 +48,7 @@ import wtf.walrus.violation.ViolationManager;
 public class PlayerListener implements Listener {
     private final JavaPlugin plugin;
     private final AICheck aiCheck;
+    private final MiningCheck miningCheck;
     private final AlertManager alertManager;
     private final ViolationManager violationManager;
     private final SessionManager sessionManager;
@@ -55,12 +57,13 @@ public class PlayerListener implements Listener {
     private final AnalyticsClient analyticsClient;
     private HitListener hitListener;
 
-    public PlayerListener(JavaPlugin plugin, AICheck aiCheck, AlertManager alertManager,
-            ViolationManager violationManager, SessionManager sessionManager,
-            TickListener tickListener, wtf.walrus.hologram.NametagManager nametagManager,
-            AnalyticsClient analyticsClient) {
+    public PlayerListener(JavaPlugin plugin, AICheck aiCheck, MiningCheck miningCheck, AlertManager alertManager,
+                          ViolationManager violationManager, SessionManager sessionManager,
+                          TickListener tickListener, wtf.walrus.hologram.NametagManager nametagManager,
+                          AnalyticsClient analyticsClient) {
         this.plugin = plugin;
         this.aiCheck = aiCheck;
+        this.miningCheck = miningCheck;
         this.alertManager = alertManager;
         this.violationManager = violationManager;
         this.sessionManager = sessionManager;
@@ -87,7 +90,7 @@ public class PlayerListener implements Listener {
             SchedulerManager.getAdapter().runSyncDelayed(() -> {
                 if (player.isOnline()) {
                     if (player.hasPermission(Permissions.ALERTS) || player.hasPermission(Permissions.ADMIN)) {
-                        alertManager.enableAlerts(player);
+                        if (player.hasPermission(Permissions.ALERTS_ON_JOIN)) alertManager.enableAlerts(player);
 
                         if (plugin instanceof Main) {
                             Main main = (Main) plugin;
@@ -161,6 +164,9 @@ public class PlayerListener implements Listener {
         }
         if (aiCheck != null) {
             aiCheck.handlePlayerQuit(player);
+        }
+        if (miningCheck != null) {
+            miningCheck.handlePlayerQuit(player);
         }
         if (alertManager != null) {
             alertManager.handlePlayerQuit(player);

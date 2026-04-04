@@ -19,10 +19,13 @@ import wtf.walrus.Main;
 import wtf.walrus.Permissions;
 import wtf.walrus.alert.AlertManager;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.DataSession;
+import wtf.walrus.data.DataType;
+import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.hologram.NametagManager;
 import wtf.walrus.ml.client.LocalAIClientProvider;
 import wtf.walrus.scheduler.ScheduledTask;
@@ -49,15 +52,17 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     private final ISessionManager sessionManager;
     private final AlertManager alertManager;
     private final AICheck aiCheck;
+    private final MiningCheck miningCheck;
     private final Main plugin;
     private final Map<UUID, UUID> probTracking = new ConcurrentHashMap<>();
     private final Map<UUID, ScheduledTask> probTasks = new ConcurrentHashMap<>();
 
     public CommandHandler(ISessionManager sessionManager, AlertManager alertManager,
-                          AICheck aiCheck, Main plugin) {
+                          AICheck aiCheck, MiningCheck miningCheck, Main plugin) {
         this.sessionManager = sessionManager;
         this.alertManager = alertManager;
         this.aiCheck = aiCheck;
+        this.miningCheck = miningCheck;
         this.plugin = plugin;
     }
 
@@ -334,17 +339,29 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 stopTracking(adminId);
                 return;
             }
-            AIPlayerData data = aiCheck.getPlayerData(targetId);
+            AIPlayerData data = aiCheck.getOrCreatePlayerData(target);
+            MiningPlayerData miningData = miningCheck.getOrCreatePlayerData(target);
             String message;
-            if (data == null) {
+            if (data == null && miningData == null) {
                 message = ColorUtil.colorize("&7" + targetPlayer.getName() + ": &eNo data");
             } else {
-                double prob = data.getLastProbability();
+                double prob = 0.0;
+                double mineProb = 0.0;
+                if (data != null) {
+                    prob = data.getLastProbability();
+                }
+                if (miningData != null) {
+                    mineProb = miningData.getLastProbability();
+                }
                 String probC = NametagManager.getColorInfo(prob);
-                double buffer = data.getBuffer();
+                String mineProbC = NametagManager.getColorInfo(prob);
+                double buffer = 0.0;
+                double mineBuffer = 0.0;
+                if (data != null) buffer = data.getBuffer();
+                if (miningData != null) mineBuffer = miningData.getBuffer();
                 int vl = plugin.getViolationManager().getViolationLevel(targetId);
                 message = ColorUtil.colorize(plugin.getMessagesConfig().getMessage(
-                        "actionbar-format", targetPlayer.getName(), prob, probC, buffer, vl));
+                        "actionbar-format", targetPlayer.getName(), prob, probC, mineProb, mineProbC, buffer, mineBuffer, vl));
             }
             adminPlayer.spigot().sendMessage(
                     ChatMessageType.ACTION_BAR,
@@ -514,7 +531,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage(getPrefix() + msg("no-permission"));
             return true;
         }
-        if (args.length < 3) {
+        if (args.length < 4) {
             sender.sendMessage(getPrefix() + msg("usage-start"));
             return true;
         }
@@ -524,17 +541,23 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage(getPrefix() + msg("valid-labels"));
             return true;
         }
-        String comment = parseComment(args, 3);
-        return handleStartPlayer(sender, args[1], sessionLabel, comment);
+        String type = args[3];
+        DataType dataType = DataType.AIM;
+        try {
+            dataType =  DataType.valueOf(type.toUpperCase());
+        } catch (Exception ignored) {}
+        String comment = parseComment(args, 4);
+        if (comment.isEmpty()) comment = dataType.name();
+        return handleStartPlayer(sender, args[1], sessionLabel, comment, dataType);
     }
 
-    private boolean handleStartPlayer(CommandSender sender, String playerName, Label label, String comment) {
+    private boolean handleStartPlayer(CommandSender sender, String playerName, Label label, String comment, DataType dataType) {
         Player player = Bukkit.getPlayer(playerName);
         if (player == null) {
             sender.sendMessage(getPrefix() + msg("player-not-found", "{PLAYER}", playerName));
             return true;
         }
-        sessionManager.startSession(player, label, comment);
+        sessionManager.startSession(player, label, comment, dataType);
         sender.sendMessage(getPrefix() + msg("session-started", "{LABEL}", label.name(), "{COUNT}", "1"));
         return true;
     }
@@ -555,7 +578,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleTrash(CommandSender sender, String[] args) {
-        if (!sender.hasPermission(Permissions.ADMIN)) {
+        if (!sender.hasPermission(Permissions.ADMIN) && !sender.hasPermission(Permissions.COLLECT)) {
             sender.sendMessage(getPrefix() + msg("no-permission"));
             return true;
         }
@@ -686,6 +709,11 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                     .map(Label::name)
                     .collect(Collectors.toList());
             completions.addAll(filterStartsWith(labels, args[2]));
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("start")) {
+            List<String> labels = Arrays.stream(DataType.values())
+                    .map(DataType::name)
+                    .collect(Collectors.toList());
+            completions.addAll(filterStartsWith(labels, args[3]));
         }
         return completions;
     }

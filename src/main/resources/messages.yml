@@ -2,7 +2,7 @@ prefix: "&#6A4EEEᴡᴀʟʀᴜs &f» &r"
 
 alerts-enabled: "&fОповещения &aвключены"
 alerts-disabled: "&fОповещения &cвыключены"
-alert-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAМодель: &f{MODEL}"
+alert-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAМодель: &f{MODEL} &f(&#85AEDB{TYPE}&f)"
 default-alert-format: "&f{PLAYER} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAVL: &f{VL} &7| &#997EFAПроверка: &f{CHECK} &8{VERBOSE}"
 alert-format-vl: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &cVL: {VL}"
 
@@ -23,7 +23,7 @@ tracking-started: "&fНачато слежение за &a{PLAYER}&f. Испол
 prob-usage: "&fИспользуйте: &#B131FF/walrus prob &7[&6ник&7]"
 player-offline: "&cИгрок не найден."
 
-actionbar-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAVL: &f{VL}"
+actionbar-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_COLORED}&f∫{MINE_PROBABILITY_COLORED} &7| &#997EFAБуфф: &f{BUFFER}&f∫{MINE_BUFFER} &7| &#997EFAVL: &f{VL}"
 
 data-status-header: "&7=== &fСтатус датасетов &7==="
 active-sessions: "&7Активные записи: &6{COUNT}"
@@ -38,7 +38,7 @@ invalid-label: "&cНедопустимая метка: &f{LABEL}"
 valid-labels: "&fДоступные этикетки: &aCHEAT, LEGIT, UNLABELED"
 
 usage-header: "&fИспользование:"
-usage-start: "&7  /walrus start <NICK|GLOBAL> <CHEAT|LEGIT|UNLABELED> \"<comment>\""
+usage-start: "&7  /walrus start <NICK|GLOBAL> <CHEAT|LEGIT|UNLABELED> <TYPE> \"<comment>\""
 usage-stop: "&7  /walrus stop <NICK|GLOBAL>"
 usage-trash: "&7  /walrus trash <NICK|GLOBAL>"
 usage-alerts: "&7  /walrus alerts - Toggle AI alerts"

@@ -26,11 +26,14 @@ package wtf.walrus.violation;
 import org.bukkit.entity.Player;
 import wtf.walrus.Main;
 import wtf.walrus.alert.AlertManager;
+import wtf.walrus.checks.CheckType;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.PunishmentEntry;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.DamageVerdict;
+import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.penalty.ActionType;
 import wtf.walrus.penalty.PenaltyContext;
 import wtf.walrus.penalty.PenaltyExecutor;
@@ -64,6 +67,7 @@ public class ViolationManager {
     private final Map<UUID, Long> lastPunishmentTime;
     private Config config;
     private AICheck aiCheck;
+    private MiningCheck miningCheck;
     private ScheduledTask decayTask;
 
     public static class KickRecord {
@@ -108,6 +112,10 @@ public class ViolationManager {
 
     public void setAICheck(AICheck aiCheck) {
         this.aiCheck = aiCheck;
+    }
+
+    public void setMiningCheck(MiningCheck miningCheck) {
+        this.miningCheck = miningCheck;
     }
 
     private void startDecayTask() {
@@ -165,15 +173,20 @@ public class ViolationManager {
         startDecayTask();
     }
 
-    public void handleFlag(Player player, double probability, double buffer) {
+    public void handleFlag(Player player, double probability, double buffer, CheckType checkType) {
         if (plugin.getSessionManager().getSession(player) != null) return;
         if (probability < config.getAiPunishmentMinProbability()) {
             return;
         }
         AIPlayerData data = plugin.getAiCheck().getOrCreatePlayerData(player);
-        if (config.isDamageVerdict()) {
+        MiningPlayerData miningData = plugin.getMiningCheck().getOrCreatePlayerData(player);
+        if (checkType.equals(CheckType.AIM) && config.isDamageVerdict()) {
             data.setDamageVerdict(new DamageVerdict(probability, System.currentTimeMillis()));
             data.ticksSinceVerdict = 0;
+        }
+        if (checkType.equals(CheckType.DIG) && config.isDigVerdict()) {
+            miningData.setDamageVerdict(new DamageVerdict(probability, System.currentTimeMillis()));
+            miningData.ticksSinceVerdict = 0;
         }
 
         UUID uuid = player.getUniqueId();

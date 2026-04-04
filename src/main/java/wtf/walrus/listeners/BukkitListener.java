@@ -5,19 +5,23 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import wtf.walrus.Main;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.DamageVerdict;
+import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.player.WalrusPlayer;
 
+import java.util.Random;
 import java.util.UUID;
 
-public class BListener implements Listener {
+public class BukkitListener implements Listener {
     private final Main plugin;
+    private final Random random = new Random();
 
-    public BListener(Main plugin) {
+    public BukkitListener(Main plugin) {
         this.plugin = plugin;
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
@@ -32,7 +36,22 @@ public class BListener implements Listener {
         if (walrusPlayer != null) walrusPlayer.setPlayer(player);
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
+    public void onDig(BlockBreakEvent e) {
+        if (!plugin.getPluginConfig().isDigVerdict()) return;
+
+        Player player = e.getPlayer();
+        MiningPlayerData data = plugin.getMiningCheck().getOrCreatePlayerData(player);
+        DamageVerdict verdict = data.getDamageVerdict();
+        if (verdict != null) {
+            if (data.ticksSinceVerdict <= 100) {
+                double r = random.nextDouble();
+                if (r < verdict.prob()) e.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!plugin.getPluginConfig().isDamageVerdict()) return;
 

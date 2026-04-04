@@ -35,15 +35,20 @@ public class DataSession {
     private final Instant startTime;
     private final AimProcessor aimProcessor;
     private int ticksSinceAttack;
+    private final DataType dataType;
 
     private static final int COMBAT_TIMEOUT = 40;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DataSession(UUID uuid, String playerName, Label label, String comment) {
-        this(uuid, playerName, label, comment, new AimProcessor());
+        this(uuid, playerName, label, comment, new AimProcessor(), DataType.AIM);
     }
 
     public DataSession(UUID uuid, String playerName, Label label, String comment, AimProcessor aimProcessor) {
+        this(uuid, playerName, label, comment, aimProcessor, DataType.AIM);
+    }
+
+    public DataSession(UUID uuid, String playerName, Label label, String comment, AimProcessor aimProcessor, DataType dataType) {
         this.uuid = uuid;
         this.playerName = playerName;
         this.label = label;
@@ -52,6 +57,7 @@ public class DataSession {
         this.startTime = Instant.now();
         this.aimProcessor = aimProcessor;
         this.ticksSinceAttack = COMBAT_TIMEOUT;
+        this.dataType = dataType;
     }
 
     public void processTick(float yaw, float pitch) {
@@ -187,5 +193,9 @@ public class DataSession {
         }
         plugin.getLogger().info("[DataSession] Saved " + recordedTicks.size()
                 + " ticks to " + outputFile.getAbsolutePath());
+    }
+
+    public DataType getDataType() {
+        return dataType;
     }
 }

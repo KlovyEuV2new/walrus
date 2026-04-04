@@ -28,17 +28,20 @@ import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerFlying;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.session.ISessionManager;
 import org.bukkit.entity.Player;
 
 public class RotationListener extends PacketListenerAbstract {
     private final ISessionManager sessionManager;
     private final AICheck aiCheck;
+    private final MiningCheck miningCheck;
 
-    public RotationListener(ISessionManager sessionManager, AICheck aiCheck) {
+    public RotationListener(ISessionManager sessionManager, AICheck aiCheck, MiningCheck miningCheck) {
         super(PacketListenerPriority.NORMAL);
         this.sessionManager = sessionManager;
         this.aiCheck = aiCheck;
+        this.miningCheck = miningCheck;
     }
 
     @Override
@@ -59,6 +62,9 @@ public class RotationListener extends PacketListenerAbstract {
             float pitch = packet.getLocation().getPitch();
             if (aiCheck != null) {
                 aiCheck.onRotationPacket(player, yaw, pitch);
+            }
+            if (miningCheck != null) {
+                miningCheck.onRotationPacket(player, yaw, pitch);
             }
             if (sessionManager.hasActiveSession(player)) {
                 sessionManager.onTick(player, yaw, pitch);

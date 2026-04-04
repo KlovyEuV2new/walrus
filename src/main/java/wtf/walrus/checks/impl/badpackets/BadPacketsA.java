@@ -16,7 +16,7 @@ public class BadPacketsA extends Check implements PacketCheck {
     private int flags = 0;
 
     public BadPacketsA(WalrusPlayer player) {
-        super(player);
+        super(player, false);
     }
 
     @Override

@@ -27,8 +27,10 @@ import org.bukkit.entity.Player;
 import wtf.walrus.Main;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.DataSession;
+import wtf.walrus.data.DataType;
 import wtf.walrus.util.AimProcessor;
 
+import javax.xml.crypto.Data;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -59,7 +61,7 @@ public class SessionManager implements ISessionManager {
     }
 
     @Override
-    public DataSession startSession(Player player, Label label, String comment) {
+    public DataSession startSession(Player player, Label label, String comment, DataType dataType) {
         UUID playerId = player.getUniqueId();
 
         // Stop existing sessions
@@ -71,7 +73,8 @@ public class SessionManager implements ISessionManager {
                 player.getName(),
                 label,
                 comment,
-                aimProcessor
+                aimProcessor,
+                dataType
         );
         activeAimSessions.put(playerId, session);
 
@@ -161,9 +164,9 @@ public class SessionManager implements ISessionManager {
     }
 
     @Override
-    public void onAttack(Player player) {
+    public void onAttack(Player player, DataType dataType) {
         DataSession session = activeAimSessions.get(player.getUniqueId());
-        if (session != null) {
+        if (session != null && session.getDataType().equals(dataType)) {
             session.onAttack();
         }
     }

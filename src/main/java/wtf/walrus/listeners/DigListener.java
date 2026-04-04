@@ -30,6 +30,7 @@ import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.protocol.player.User;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.data.DataType;
 import wtf.walrus.session.ISessionManager;
 import org.bukkit.Bukkit;
@@ -38,15 +39,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class HitListener extends PacketListenerAbstract {
+public class DigListener extends PacketListenerAbstract {
     private final ISessionManager sessionManager;
-    private final AICheck aiCheck;
+    private final MiningCheck miningCheck;
     private final Map<Integer, UUID> playerIdCache = new ConcurrentHashMap<>();
 
-    public HitListener(ISessionManager sessionManager, AICheck aiCheck) {
+    public DigListener(ISessionManager sessionManager, MiningCheck aiCheck) {
         super(PacketListenerPriority.NORMAL);
         this.sessionManager = sessionManager;
-        this.aiCheck = aiCheck;
+        this.miningCheck = aiCheck;
     }
 
     public void setCurrentTick(int tick) {
@@ -82,27 +83,18 @@ public class HitListener extends PacketListenerAbstract {
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
         try {
-            if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY) {
+            if (event.getPacketType() != PacketType.Play.Client.PLAYER_DIGGING) {
                 return;
             }
             User user = event.getUser();
-            WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
-            if (packet.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
-                return;
-            }
             Player attacker = (Player) event.getPlayer();
             if (attacker == null) {
                 return;
             }
-            int targetId = packet.getEntityId();
-            Player target = getPlayerById(targetId);
-            if (target == null) {
-                return;
+            if (miningCheck != null) {
+                miningCheck.onDig(attacker);
             }
-            if (aiCheck != null) {
-                aiCheck.onAttack(attacker, target);
-            }
-            sessionManager.onAttack(attacker, DataType.AIM);
+            sessionManager.onAttack(attacker, DataType.DIG);
         } catch (Exception e) {
         }
     }

@@ -26,13 +26,14 @@ package wtf.walrus.datacollector;
 import org.bukkit.entity.Player;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.DataSession;
+import wtf.walrus.data.DataType;
 import wtf.walrus.session.ISessionManager;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.UUID;
 public class NoOpSessionManager implements ISessionManager {
     @Override
-    public DataSession startSession(Player player, Label label, String comment) {
+    public DataSession startSession(Player player, Label label, String comment, DataType dataType) {
         return null;
     }
     @Override
@@ -82,7 +83,7 @@ public class NoOpSessionManager implements ISessionManager {
         return null;
     }
     @Override
-    public void onAttack(Player player) {
+    public void onAttack(Player player, DataType dataType) {
     }
     @Override
     public void onTick(Player player, float yaw, float pitch) {

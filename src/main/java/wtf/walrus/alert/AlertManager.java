@@ -27,6 +27,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import wtf.walrus.Main;
 import wtf.walrus.Permissions;
+import wtf.walrus.checks.CheckType;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.MessagesConfig;
 import wtf.walrus.hologram.NametagManager;
@@ -93,7 +94,7 @@ public class AlertManager {
     }
 
     public void sendAlert(String suspectName, double probability, double buffer) {
-        sendAlert(suspectName, probability, buffer, null);
+        sendAlert(suspectName, probability, buffer, null, CheckType.UNKNOWN);
     }
 
     public void sendAlert(String suspectName, int vl, double buffer, String checkName, String verbose) {
@@ -111,8 +112,8 @@ public class AlertManager {
         });
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, String modelName) {
-        String message = formatAlertMessage(suspectName, probability, buffer, modelName);
+    public void sendAlert(String suspectName, double probability, double buffer, String modelName, CheckType checkType) {
+        String message = formatAlertMessage(suspectName, probability, buffer, modelName, checkType);
         scheduler.runSync(() -> {
             for (UUID uuid : playersWithAlerts) {
                 Player player = Bukkit.getPlayer(uuid);
@@ -127,11 +128,11 @@ public class AlertManager {
     }
 
     public void sendAlert(String suspectName, double probability, double buffer, int vl) {
-        sendAlert(suspectName, probability, buffer, vl, null);
+        sendAlert(suspectName, probability, buffer, vl, null, CheckType.UNKNOWN);
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName) {
-        String message = formatAlertMessage(suspectName, probability, buffer, vl, modelName);
+    public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName, CheckType checkType) {
+        String message = formatAlertMessage(suspectName, probability, buffer, vl, modelName, checkType);
         scheduler.runSync(() -> {
             for (UUID uuid : playersWithAlerts) {
                 Player player = Bukkit.getPlayer(uuid);
@@ -153,19 +154,23 @@ public class AlertManager {
         return getPrefix() + ColorUtil.colorize(template);
     }
 
-    private String formatAlertMessage(String suspectName, double probability, double buffer, String modelName) {
+    private String formatAlertMessage(String suspectName, double probability, double buffer, String modelName, CheckType checkType) {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format", suspectName, probability, pc, buffer, 0);
         String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
-        template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay);
+        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
+                .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
         return getPrefix() + ColorUtil.colorize(template);
     }
 
-    private String formatAlertMessage(String suspectName, double probability, double buffer, int vl, String modelName) {
+    private String formatAlertMessage(String suspectName, double probability, double buffer, int vl, String modelName, CheckType checkType) {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format-vl", suspectName, probability, pc, buffer, vl);
         String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
-        template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay);
+        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
+                .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
         return getPrefix() + ColorUtil.colorize(template);
     }
 

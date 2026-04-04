@@ -28,6 +28,7 @@ public final class Permissions {
     }
 
     public static final String ALERTS = "walrus.alerts";
+    public static final String ALERTS_ON_JOIN = "walrus.alerts.enable_on_join";
     public static final String PROB = "walrus.prob";
     public static final String RELOAD = "walrus.reload";
     public static final String ADMIN = "walrus.admin";

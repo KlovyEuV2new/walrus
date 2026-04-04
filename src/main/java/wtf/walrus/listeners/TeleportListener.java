@@ -28,15 +28,22 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
+
 public class TeleportListener implements Listener {
     private final AICheck aiCheck;
-    public TeleportListener(AICheck aiCheck) {
+    private final MiningCheck miningCheck;
+    public TeleportListener(AICheck aiCheck, MiningCheck miningCheck) {
         this.aiCheck = aiCheck;
+        this.miningCheck = miningCheck;
     }
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         if (aiCheck != null) {
             aiCheck.onTeleport(event.getPlayer());
+        }
+        if (miningCheck != null) {
+            miningCheck.onTeleport(event.getPlayer());
         }
     }
 }

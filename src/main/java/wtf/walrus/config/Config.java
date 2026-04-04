@@ -25,7 +25,7 @@ public class Config {
     private final String outputDirectory;
 
     // ── AI / Detection ────────────────────────────────────────────────────────
-    private final boolean aiEnabled;
+    private final boolean aiEnabled, miningAiEnabled;
     private final String aiApiKey;
     private final double aiAlertThreshold;
     private final boolean aiConsoleAlerts;
@@ -86,7 +86,7 @@ public class Config {
     private final int analyticsMinDetections;
     private final int analyticsColorGreenMax;
     private final int analyticsColorOrangeMax;
-    private final boolean damageVerdict;
+    private final boolean damageVerdict, digVerdict;
     public final boolean oneProbPunishment;
 
     // ── Defaults ──────────────────────────────────────────────────────────────
@@ -154,6 +154,7 @@ public class Config {
         this.postHitTimeoutTicks = POST_HIT_TIMEOUT_TICKS;
         this.outputDirectory = DEFAULT_OUTPUT_DIRECTORY;
         this.aiEnabled = DEFAULT_AI_ENABLED;
+        this.miningAiEnabled = false;
         this.aiApiKey = DEFAULT_AI_API_KEY;
         this.aiAlertThreshold = DEFAULT_AI_ALERT_THRESHOLD;
         this.aiConsoleAlerts = DEFAULT_AI_CONSOLE_ALERTS;
@@ -196,8 +197,9 @@ public class Config {
         this.analyticsMinDetections = DEFAULT_ANALYTICS_MIN_DETECTIONS;
         this.analyticsColorGreenMax = DEFAULT_ANALYTICS_COLOR_GREEN_MAX;
         this.analyticsColorOrangeMax = DEFAULT_ANALYTICS_COLOR_ORANGE_MAX;
-        this.damageVerdict = true;
+        this.damageVerdict = false;
         this.oneProbPunishment = false;
+        this.digVerdict = false;
     }
 
     private static Set<String> createDefaultCheatReasons() {
@@ -227,6 +229,7 @@ public class Config {
         // ── Detection ─────────────────────────────────────────────────────────
         this.aiEnabled = config.getBoolean("detection.enabled",
                 config.getBoolean("ai.enabled", DEFAULT_AI_ENABLED));
+        this.miningAiEnabled = config.getBoolean("detection.mining.enabled", config.getBoolean("ai.mining.enabled", false));
 
         this.aiApiKey = config.getString("detection.api-key",
                 config.getString("ai.api-key", DEFAULT_AI_API_KEY));
@@ -260,7 +263,8 @@ public class Config {
 
         // ── Local ML mode ─────────────────────────────────────────────────────
         this.localModeEnabled = config.getBoolean("detection.local-mode", DEFAULT_LOCAL_MODE);
-        this.damageVerdict = config.getBoolean("detection.damage-verdict", true);
+        this.damageVerdict = config.getBoolean("detection.damage-verdict", false);
+        this.digVerdict = config.getBoolean("detection.dig-verdict", false);
 
         // ── Punishment commands ───────────────────────────────────────────────
         this.punishmentCommands = new HashMap<>();
@@ -364,6 +368,7 @@ public class Config {
         this.analyticsMinDetections = config.getInt("analytics.min-detections", DEFAULT_ANALYTICS_MIN_DETECTIONS);
         this.analyticsColorGreenMax = config.getInt("analytics.colors.green", DEFAULT_ANALYTICS_COLOR_GREEN_MAX);
         this.analyticsColorOrangeMax = config.getInt("analytics.colors.orange", DEFAULT_ANALYTICS_COLOR_ORANGE_MAX);
+
     }
 
     private double clampThreshold(double value, String configPath, Logger logger) {
@@ -480,5 +485,13 @@ public class Config {
 
     public boolean isOneUseProbPunishment() {
         return oneProbPunishment;
+    }
+
+    public boolean isMiningAiEnabled() {
+        return miningAiEnabled;
+    }
+
+    public boolean isDigVerdict() {
+        return digVerdict;
     }
 }

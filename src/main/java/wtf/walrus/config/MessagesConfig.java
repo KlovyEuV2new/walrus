@@ -103,6 +103,43 @@ public class MessagesConfig {
                 .replace("<vl>", vlValue);
     }
 
+    public String getMessage(String key, String player, double probability, String prob_colored, double mineProbability, String mineProb_colored, double buffer, double mineBuffer, int vl) {
+        String msg = getMessage(key);
+        String playerValue = player != null ? player : "";
+        String probValue = String.format("%.4f", probability);
+        String mineProbValue = String.format("%.4f", mineProbability);
+        String bufferValue = String.format("%.1f", buffer);
+        String mineBufferValue = String.format("%.1f", mineBuffer);
+        String vlValue = String.valueOf(vl);
+        String pcf = NametagManager.getColorInfoFull(probability);
+        String mpcf = NametagManager.getColorInfoFull(mineProbability);
+        return msg
+                .replace("{PLAYER}", playerValue)
+                .replace("{PROBABILITY}", probValue)
+                .replace("{MINE_PROBABILITY}", mineProbValue)
+                .replace("{PROBABILITY_FULL}", String.valueOf(probability))
+                .replace("{MINE_PROBABILITY_FULL}", String.valueOf(mineProbability))
+                .replace("{MINE_PROBABILITY_FULL_COLORED}", mpcf)
+                .replace("{PROBABILITY_FULL_COLORED}", pcf)
+                .replace("{PROBABILITY_COLORED}", prob_colored)
+                .replace("{MINE_PROBABILITY_COLORED}", mineProb_colored)
+                .replace("{BUFFER}", bufferValue)
+                .replace("{MINE_BUFFER}", mineBufferValue)
+                .replace("{VL}", vlValue)
+                .replace("<player>", playerValue)
+                .replace("<probability>", probValue)
+                .replace("<mine_probability>", mineProbValue)
+                .replace("<probability_full>", String.valueOf(probability))
+                .replace("<probability_colored>", prob_colored)
+                .replace("<probability_full_colored>", pcf)
+                .replace("<mine_probability_colored>", mineProb_colored)
+                .replace("<mine_probability_full>", String.valueOf(mineProbability))
+                .replace("<mine_probability_full_colored>", mpcf)
+                .replace("<buffer>", bufferValue)
+                .replace("<mine_buffer>", mineBufferValue)
+                .replace("<vl>", vlValue);
+    }
+
     public String getMessage(String key, String... replacements) {
         String msg = getMessage(key);
         for (int i = 0; i < replacements.length - 1; i += 2) {

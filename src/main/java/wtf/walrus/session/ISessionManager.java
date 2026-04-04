@@ -26,11 +26,12 @@ package wtf.walrus.session;
 import org.bukkit.entity.Player;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.DataSession;
+import wtf.walrus.data.DataType;
 
 import java.util.Collection;
 import java.util.UUID;
 public interface ISessionManager {
-    DataSession startSession(Player player, Label label, String comment);
+    DataSession startSession(Player player, Label label, String comment, DataType dataType);
     void stopSession(Player player);
     void stopSession(UUID playerId);
     void removeSession(Player player);
@@ -44,6 +45,6 @@ public interface ISessionManager {
     Collection<DataSession> getActiveSessions();
     int getActiveSessionCount();
     String getCurrentSessionFolder();
-    void onAttack(Player player);
+    void onAttack(Player player, DataType dataType);
     void onTick(Player player, float yaw, float pitch);
 }

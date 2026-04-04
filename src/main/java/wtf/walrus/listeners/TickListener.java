@@ -1,6 +1,7 @@
 package wtf.walrus.listeners;
 
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.compat.EventCompat;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
@@ -15,15 +16,18 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TickListener {
     private final ISessionManager sessionManager;
     private final AICheck aiCheck;
+    private final MiningCheck miningCheck;
     private final wtf.walrus.hologram.NametagManager nametagManager;
     private final EventCompat.TickHandler tickHandler;
     private final Map<UUID, ScheduledTask> playerTasks = new ConcurrentHashMap<>();
     private HitListener hitListener;
+    private DigListener digListener;
 
-    public TickListener(JavaPlugin plugin, ISessionManager sessionManager, AICheck aiCheck,
+    public TickListener(JavaPlugin plugin, ISessionManager sessionManager, AICheck aiCheck, MiningCheck miningCheck,
             wtf.walrus.hologram.NametagManager nametagManager) {
         this.sessionManager = sessionManager;
         this.aiCheck = aiCheck;
+        this.miningCheck = miningCheck;
         this.nametagManager = nametagManager;
         this.tickHandler = EventCompat.createTickHandler(plugin, this::onTick);
     }
@@ -44,10 +48,17 @@ public class TickListener {
         this.hitListener = hitListener;
     }
 
+    public void setDigListener(DigListener digListener) {
+        this.digListener = digListener;
+    }
+
     private void onTick() {
         int currentTick = tickHandler.getCurrentTick();
         if (hitListener != null) {
             hitListener.setCurrentTick(currentTick);
+        }
+        if (digListener != null) {
+            digListener.setCurrentTick(currentTick);
         }
     }
 
@@ -60,6 +71,9 @@ public class TickListener {
             ScheduledTask task = SchedulerManager.getAdapter().runEntitySyncRepeating(player, () -> {
                 if (aiCheck != null) {
                     aiCheck.onTick(player);
+                }
+                if (miningCheck != null) {
+                    miningCheck.onTick(player);
                 }
             }, 1L, 1L);
             playerTasks.put(player.getUniqueId(), task);

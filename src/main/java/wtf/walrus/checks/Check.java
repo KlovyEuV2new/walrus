@@ -43,6 +43,15 @@ public class Check {
 
     private long vlDecayMs = 300_000L;
 
+    public Check(WalrusPlayer player, boolean defEnabled) {
+        this.player = player;
+        CheckData data = this.getClass().getAnnotation(CheckData.class);
+        if (data == null) {
+            throw new IllegalStateException("CheckData annotation missing on " + this.getClass().getSimpleName());
+        } else loadCheckData(data);
+        loadConfig(data, defEnabled);
+    }
+
     public Check(WalrusPlayer player) {
         this.player = player;
         CheckData data = this.getClass().getAnnotation(CheckData.class);
@@ -109,6 +118,11 @@ public class Check {
                 || type == PacketType.Play.Client.PLAYER_FLYING;
     }
 
+    public void loadConfig() {
+        CheckData data = this.getClass().getAnnotation(CheckData.class);
+        if (data != null) loadConfig(data);
+    }
+
     public void loadConfig(CheckData data) {
         Main plugin = Main.instance;
         FileConfiguration config = plugin.getConfig();
@@ -116,6 +130,30 @@ public class Check {
 
         if (section != null) {
             this.enabledInConfig = section.getBoolean("enabled", true);
+            int decaySec = section.getInt("vl-decay", data.decay());
+            int alertPer = section.getInt("alert-per", data.ap());
+            if (decaySec > 0) {
+                this.vlDecayMs = decaySec * 1000L;
+            } else {
+                this.vlDecayMs = data.decay() * 1000L;
+            }
+            if (alertPer > 0) {
+                this.ap = alertPer;
+            } else this.ap = data.ap();
+        } else {
+            this.enabledInConfig = true;
+            this.vlDecayMs = data.decay() * 1000L;
+            this.ap = data.ap();
+        }
+    }
+
+    public void loadConfig(CheckData data, boolean defEnabled) {
+        Main plugin = Main.instance;
+        FileConfiguration config = plugin.getConfig();
+        ConfigurationSection section = config.getConfigurationSection("checks." + getName());
+
+        if (section != null) {
+            this.enabledInConfig = section.getBoolean("enabled", defEnabled);
             int decaySec = section.getInt("vl-decay", data.decay());
             int alertPer = section.getInt("alert-per", data.ap());
             if (decaySec > 0) {
