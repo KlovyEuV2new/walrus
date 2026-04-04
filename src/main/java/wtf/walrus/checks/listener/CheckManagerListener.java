@@ -163,7 +163,6 @@ public class CheckManagerListener extends PacketListenerAbstract {
                 player.lastPacketWasOnePointSeventeenDuplicate = false;
                 player.onGround = wrapper.isOnGround();
             }
-            player.updateSimulation();
         }
 
         player.checkManager.onPacketReceive(event);

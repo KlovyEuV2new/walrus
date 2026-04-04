@@ -42,6 +42,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import wtf.walrus.util.FastMath;
 
 public class NametagManager extends PacketListenerAbstract implements Listener {
 
@@ -435,7 +436,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     public static String getColorInfo(double val) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = String.format("%.4f", val);
+        String fmt = FastMath.format(val, 4);
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;
@@ -445,7 +446,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     public static String getColorInfoFull(double val) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = String.format("%.4f", val);
+        String fmt = FastMath.format(val, 4);
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;

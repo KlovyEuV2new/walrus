@@ -81,7 +81,7 @@ public final class Main extends JavaPlugin {
     private PunishmentsConfig punishmentsConfig;
     private PunishmentManager punishmentManager;
 
-    private BukkitListener bListener;
+    private PunishListener bListener;
 
     @Override
     public void onLoad() {
@@ -201,7 +201,7 @@ public final class Main extends JavaPlugin {
         this.hitListener.cacheOnlinePlayers();
         this.tickListener.start();
         this.checkManagerListener = new CheckManagerListener();
-        this.bListener = new BukkitListener(this);
+        this.bListener = new PunishListener(this);
 
         for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
             this.tickListener.startPlayerTask(p);
@@ -222,7 +222,7 @@ public final class Main extends JavaPlugin {
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             User user = PacketEvents.getAPI().getPlayerManager().getUser(player);
-            if (user != null) new WalrusPlayer(player, user, user.getUUID());
+            new WalrusPlayer(user, user.getUUID());
         }
 
         getLogger().info("MLSAC enabled successfully!");
@@ -354,7 +354,7 @@ public final class Main extends JavaPlugin {
         return checkManagerListener;
     }
 
-    public BukkitListener getbListener() {
+    public PunishListener getbListener() {
         return bListener;
     }
 

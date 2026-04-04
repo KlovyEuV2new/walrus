@@ -37,7 +37,6 @@ public class WalrusPlayer {
 
     private static final CopyOnWriteArrayList<WalrusPlayer> players = new CopyOnWriteArrayList<>();
 
-    public Player player;
     public final User user;
     public final UUID uuid;
 
@@ -45,7 +44,6 @@ public class WalrusPlayer {
     public boolean wasSprinting, isSprinting, wasSneaking, isSneaking, isFlying, isAllowedFlight, godMode, creativeAbility,
             inventoryOpened, isGliding, isSwimming, wasSwimming, wasGliding, inVehicle, didSendMovementBeforeTickEnd,
             lastPacketWasTeleport, lastPacketWasOnePointSeventeenDuplicate, lastOnGround, onGround;
-    public Simulation simulation;
     public int heldSlot, xp, openWindowID;
     public long lastInteract, lastAttack, lastStopSprint, lastStartSprint, lastStopSneaking, lastStartSneaking, firstJoined;
     public Vector3d lastPosition, position;
@@ -83,36 +81,13 @@ public class WalrusPlayer {
         players.add(this);
     }
 
-    public WalrusPlayer(Player player, User user, UUID uuid) {
-        this.player = player;
-        this.user = user;
-        this.uuid = uuid;
-        this.checkManager = new CheckManager(this);
-        this.rotationData = new PlayerRotationData(this);
-        players.add(this);
-    }
-
     public void disconnect(Component reason) {
-        String textReason;
-        if (reason instanceof TranslatableComponent translatableComponent) {
-            textReason = translatableComponent.key();
-        } else {
-            textReason = LegacyComponentSerializer.legacySection().serialize(reason);
-        }
         try {
             user.sendPacket(new WrapperPlayServerDisconnect(reason));
-        } catch (Exception ignored) { // There may (?) be an exception if the player is in the wrong state...
+        } catch (Exception ignored) {
+        } finally {
+            user.closeConnection();
         }
-        user.closeConnection();
-        if (player != null) {
-            Bukkit.getScheduler().runTask(Main.instance, () -> {
-                player.kickPlayer(textReason);
-            });
-        }
-    }
-
-    public void setPlayer(Player player) {
-        this.player = player;
     }
 
     public boolean hasAttackedSince(long time) {
@@ -121,14 +96,6 @@ public class WalrusPlayer {
 
     public void onDisconnect() {
         players.remove(this);
-    }
-
-    public void updateSimulation() {
-        AttributeInstance jump = player.getAttribute(Attribute.HORSE_JUMP_STRENGTH);
-        AttributeInstance walk = player.getAttribute(Attribute.GENERIC_MOVEMENT_SPEED);
-        boolean isJump = SimulationUtil.isJump(jump != null ? jump.getValue() : 0.41999998688697815D, deltaY, 1e-5);
-        boolean isWalk = SimulationUtil.isWalk(walk != null ? walk.getValue() : 0.1, deltaXZ, 1e-5);
-        this.simulation = new Simulation(isWalk, isJump);
     }
 
     public double deltaX() {
