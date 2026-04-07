@@ -21,7 +21,7 @@ public class TickListener {
     private final EventCompat.TickHandler tickHandler;
     private final Map<UUID, ScheduledTask> playerTasks = new ConcurrentHashMap<>();
     private HitListener hitListener;
-    private DigListener digListener;
+    private BlockListener digListener;
 
     public TickListener(JavaPlugin plugin, ISessionManager sessionManager, AICheck aiCheck, MiningCheck miningCheck,
             wtf.walrus.hologram.NametagManager nametagManager) {
@@ -48,7 +48,7 @@ public class TickListener {
         this.hitListener = hitListener;
     }
 
-    public void setDigListener(DigListener digListener) {
+    public void setDigListener(BlockListener digListener) {
         this.digListener = digListener;
     }
 

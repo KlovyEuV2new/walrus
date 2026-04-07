@@ -8,6 +8,7 @@ package wtf.walrus.menu;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
@@ -20,12 +21,14 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import wtf.walrus.checks.CheckType;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.HologramConfig;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.MiningPlayerData;
+import wtf.walrus.ml.managers.VerdictManager;
 import wtf.walrus.server.AnalyticsClient;
 import wtf.walrus.util.ColorUtil;
 import wtf.walrus.Main;
@@ -59,7 +62,7 @@ public class SuspectsMenu implements Listener {
         this.miningCheck = main.getMiningCheck();
         this.analyticsClient = main.getAnalyticsClient();
         this.pluginConfig = main.getPluginConfig();
-        org.bukkit.configuration.file.FileConfiguration config = main.getMenuConfig().getConfig();
+        FileConfiguration config = main.getMenuConfig().getConfig();
         String title = config.getString("gui.title", "&cMLSAC &8> &7Suspects");
         this.inventory = Bukkit.createInventory(null, 54, ColorUtil.colorize(title));
         Bukkit.getPluginManager().registerEvents(this, plugin);
@@ -119,7 +122,7 @@ public class SuspectsMenu implements Listener {
             }
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).thenRun(() -> {
-                org.bukkit.configuration.file.FileConfiguration config = ((Main) plugin).getMenuConfig().getConfig();
+                FileConfiguration config = ((Main) plugin).getMenuConfig().getConfig();
                 ItemStack[] newContents = new ItemStack[54];
 
                 for (int i = 0; i < pageData.size(); i++) {
@@ -193,7 +196,7 @@ public class SuspectsMenu implements Listener {
         }
     }
 
-    private ItemStack createSuspectHeadFromData(SuspectData data, org.bukkit.configuration.file.FileConfiguration config) {
+    private ItemStack createSuspectHeadFromData(SuspectData data, FileConfiguration config) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         if (meta != null) {
@@ -216,10 +219,40 @@ public class SuspectsMenu implements Listener {
             StringBuilder mineHistStr = new StringBuilder();
             data.mineHistory.stream().skip(Math.max(0, data.mineHistory.size() - 5)).forEach(v -> mineHistStr.append(getColorInfo(v)).append(" "));
 
+            VerdictManager verdictManager = Main.instance.getVerdictManager();
+
+            CheckType lastType = verdictManager.getLastVerdict(data.uuid);
+            Object lastClass = verdictManager.getLastClass(data.uuid);
+
+            boolean invalidLast = false;
+            int lastSec = 0;
+            String lastSecStr = "N/A";
+            List<Double> lastHistory = new ArrayList<>();
+            StringBuilder lastHistStr;
+            double lastAvg = 0;
+            if (lastClass instanceof AICheck) {
+                lastSec = hitSec;
+                lastHistStr = historyStr;
+                lastAvg = data.avgProbability;
+                lastHistory = data.history;
+                data.mineHistory.stream().skip(Math.max(0, data.mineHistory.size() - 5)).forEach(v -> lastHistStr.append(getColorInfo(v)).append(" "));
+            } else if (lastClass instanceof MiningCheck) {
+                lastSec = mineSec;
+                lastHistStr = mineHistStr;
+                lastAvg = data.mineAvg;
+                lastHistory = data.mineHistory;
+                data.mineHistory.stream().skip(Math.max(0, data.mineHistory.size() - 5)).forEach(v -> lastHistStr.append(getColorInfo(v)).append(" "));
+            } else {
+                lastHistStr = new StringBuilder();
+                invalidLast = true;
+            }
+            lastSecStr = lastSec < 0 ? "<0" : (lastSec > 1000 ? "1000+" : String.valueOf(lastSec));
+
             for (String line : loreFormat) {
                 String detectionsStr = data.analyticsFound ? pluginConfig.getDetectionColor(data.analyticsDetections) + data.analyticsDetections : "&7N/A";
 
                 String processed = line
+                        .replace("{LAST}", lastType.name())
                         .replace("{AVG_PROB}", getColorInfo(data.avgProbability))
                         .replace("{HISTORY}", historyStr.toString().trim())
                         .replace("{LAST_HIT}", hitStr)
@@ -228,11 +261,18 @@ public class SuspectsMenu implements Listener {
                         .replace("{MINE_AVG_PROB}", getColorInfo(data.mineAvg))
                         .replace("{HISTORY_SIZE}", String.valueOf(data.history.size()))
                         .replace("{MINE_HISTORY_SIZE}", String.valueOf(data.mineHistory.size()))
-                        .replace("{MINE_HISTORY}", mineHistStr.toString().trim());
+                        .replace("{MINE_HISTORY}", mineHistStr.toString().trim())
+                        .replace("{LAST_AVG_PROB}", getColorInfo(lastAvg))
+                        .replace("{LAST_HISTORY}", lastHistStr)
+                        .replace("{LAST_ACTION}", lastSecStr)
+                        .replace("{LAST_HISTORY_SIZE}", String.valueOf(lastHistory.size()));
 
                 for (int i = 0; i < 20; i++) {
                     processed = processed.replace("{PROB_" + (i + 1) + "}", i < data.history.size() ? getColorInfo(data.history.get(i)) : "");
                     processed = processed.replace("{MINE_PROB_" + (i + 1) + "}", i < data.mineHistory.size() ? getColorInfo(data.mineHistory.get(i)) : "");
+                    if (!invalidLast) {
+                        processed = processed.replace("{LAST_PROB_" + (i + 1) + "}", i < lastHistory.size() ? getColorInfo(lastHistory.get(i)) : "");
+                    } else processed = processed.replace("{LAST_PROB_" + (i + 1) + "}", "");
                 }
                 lore.add(ColorUtil.colorize(processed));
             }
@@ -269,7 +309,7 @@ public class SuspectsMenu implements Listener {
         ItemStack item = event.getCurrentItem();
         if (item == null || item.getType() == Material.AIR) return;
 
-        org.bukkit.configuration.file.FileConfiguration config = ((Main) plugin).getMenuConfig().getConfig();
+        FileConfiguration config = ((Main) plugin).getMenuConfig().getConfig();
         if (event.getSlot() == 45 && page > 0) { page--; buildAndApply(true); return; }
         if (event.getSlot() == 53) { page++; buildAndApply(true); return; }
 

@@ -1,5 +1,5 @@
 package wtf.walrus.checks;
 
 public enum CheckType {
-    AIM, DIG, DEFAULT, UNKNOWN
+    AIM, BLOCK, DEFAULT, UNKNOWN
 }

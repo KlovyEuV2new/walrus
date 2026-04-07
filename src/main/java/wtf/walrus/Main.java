@@ -26,6 +26,7 @@ import wtf.walrus.listeners.*;
 import wtf.walrus.ml.Model;
 import wtf.walrus.ml.client.LocalAIClientProvider;
 import wtf.walrus.ml.managers.TrainingDataManager;
+import wtf.walrus.ml.managers.VerdictManager;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.punishment.PunishmentManager;
 import wtf.walrus.scheduler.SchedulerManager;
@@ -52,7 +53,7 @@ public final class Main extends JavaPlugin {
     private FeatureCalculator featureCalculator;
     private TickListener tickListener;
     private HitListener hitListener;
-    private DigListener digListener;
+    private BlockListener digListener;
     private RotationListener rotationListener;
     private PlayerListener playerListener;
     private TeleportListener teleportListener;
@@ -65,6 +66,7 @@ public final class Main extends JavaPlugin {
     public MiningCheck miningCheck;
     private UpdateChecker updateChecker;
     private AnalyticsClient analyticsClient;
+    private VerdictManager verdictManager;
 
     public MiningCheck getMiningCheck() {
         return miningCheck;
@@ -81,10 +83,19 @@ public final class Main extends JavaPlugin {
     private PunishmentsConfig punishmentsConfig;
     private PunishmentManager punishmentManager;
 
-    private BukkitListener bListener;
+    private PunishListener bListener;
 
     @Override
     public void onLoad() {
+        if (PacketEvents.getAPI() == null || !PacketEvents.getAPI().isLoaded()) {
+            PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+            PacketEvents.getAPI().getSettings()
+                    .reEncodeByDefault(false)
+                    .checkForUpdates(false)
+                    .bStats(false)
+                    .debug(false);
+            PacketEvents.getAPI().load();
+        }
         VersionAdapter.init(getLogger());
     }
 
@@ -106,15 +117,6 @@ public final class Main extends JavaPlugin {
         }
 
         try {
-            if (PacketEvents.getAPI() == null || !PacketEvents.getAPI().isLoaded()) {
-                PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
-                PacketEvents.getAPI().getSettings()
-                        .reEncodeByDefault(false)
-                        .checkForUpdates(false)
-                        .bStats(false)
-                        .debug(false);
-                PacketEvents.getAPI().load();
-            }
             if (!PacketEvents.getAPI().isInitialized()) {
                 PacketEvents.getAPI().init();
             }
@@ -143,7 +145,11 @@ public final class Main extends JavaPlugin {
         this.sessionManager = DataCollectorFactory.createSessionManager(this);
 
         this.localAIClientProvider = new LocalAIClientProvider(getDataFolder(), getLogger());
-        this.localAIClientProvider.initialize();
+        try {
+            this.localAIClientProvider.initialize();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
 
         this.aiClientProvider = new AIClientProvider(this, config);
 
@@ -162,7 +168,11 @@ public final class Main extends JavaPlugin {
                 getLogger().info("AI Mode: REMOTE (WebSocket VPS at " + rHost + ":" + rPort + ")");
             }
 
-            this.aiClientProvider.initialize();
+            try {
+                this.aiClientProvider.initialize();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
         } else {
             getLogger().info("AI detection: DISABLED in config");
         }
@@ -174,17 +184,22 @@ public final class Main extends JavaPlugin {
         this.aiCheck = new AICheck(this, config, aiClientProvider, alertManager, violationManager);
         this.miningCheck = new MiningCheck(this, config, aiClientProvider, alertManager, violationManager);
         for (Model model : localAIClientProvider.getModels()) {
-            model.reload(aiCheck);
+            try {
+                model.reload(aiCheck);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
         }
         this.violationManager.setAICheck(aiCheck);
         this.violationManager.setMiningCheck(miningCheck);
+        this.verdictManager = new VerdictManager(aiCheck, miningCheck);
 
         this.nametagManager = new NametagManager(this, aiCheck, miningCheck);
         this.nametagManager.start();
 
         this.tickListener = new TickListener(this, sessionManager, aiCheck, miningCheck, nametagManager);
         this.hitListener = new HitListener(sessionManager, aiCheck);
-        this.digListener = new DigListener(sessionManager, miningCheck);
+        this.digListener = new BlockListener(sessionManager, miningCheck);
         this.rotationListener = new RotationListener(sessionManager, aiCheck, miningCheck);
 
         this.analyticsClient = config.isLocalModeEnabled() ? null : new AnalyticsClient(config.getServerAddress(), getLogger());
@@ -201,7 +216,7 @@ public final class Main extends JavaPlugin {
         this.hitListener.cacheOnlinePlayers();
         this.tickListener.start();
         this.checkManagerListener = new CheckManagerListener();
-        this.bListener = new BukkitListener(this);
+        this.bListener = new PunishListener(this);
 
         for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
             this.tickListener.startPlayerTask(p);
@@ -222,7 +237,7 @@ public final class Main extends JavaPlugin {
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             User user = PacketEvents.getAPI().getPlayerManager().getUser(player);
-            if (user != null) new WalrusPlayer(player, user, user.getUUID());
+            if (user != null) new WalrusPlayer(user, user.getUUID());
         }
 
         getLogger().info("MLSAC enabled successfully!");
@@ -288,7 +303,11 @@ public final class Main extends JavaPlugin {
                 aiCheck.setConfig(config);
                 miningCheck.setConfig(config);
                 for (Model model : localAIClientProvider.getModels()) {
-                    model.reload(aiCheck);
+                    try {
+                        model.reload(aiCheck);
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
                 }
 
                 for (WalrusPlayer player : WalrusPlayer.getPlayers()) {
@@ -305,7 +324,11 @@ public final class Main extends JavaPlugin {
                         if (config.isLocalModeEnabled()) {
                             if (localAIClientProvider == null) {
                                 localAIClientProvider = new LocalAIClientProvider(getDataFolder(), getLogger());
-                                localAIClientProvider.initialize();
+                                try {
+                                    localAIClientProvider.initialize();
+                                } catch (Exception ex) {
+                                    ex.printStackTrace();
+                                }
                             }
                             aiClientProvider.setLocalClient(localAIClientProvider.getClient());
                             getLogger().info("Switched to LOCAL mode.");
@@ -354,11 +377,15 @@ public final class Main extends JavaPlugin {
         return checkManagerListener;
     }
 
-    public BukkitListener getbListener() {
+    public PunishListener getbListener() {
         return bListener;
     }
 
-    public DigListener getDigListener() {
+    public BlockListener getDigListener() {
         return digListener;
+    }
+
+    public VerdictManager getVerdictManager() {
+        return verdictManager;
     }
 }

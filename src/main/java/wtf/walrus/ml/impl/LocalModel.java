@@ -8,12 +8,12 @@ import java.util.*;
 
 public class LocalModel extends Model {
 
-    public static final int version = 43;
-    public static final int IN = 34;
+    public static final int version = 44;
+    public static final int IN = 37;
 
     private final int BATCH_SIZE = 32;
 
-    private static final double LR       = 0.0001; // 0.001
+    private static final double LR       = 0.0001;
     private static final double BETA1    = 0.9;
     private static final double BETA2    = 0.999;
     private static final double EPS      = 1e-8;
@@ -279,11 +279,9 @@ public class LocalModel extends Model {
         System.arraycopy(bB3,   0, b3,   0, 8);
     }
 
-    private double computeLoss(List<double[]> featuresList, List<Double> labels)
-    {
-        if (featuresList.size() != labels.size()) {
+    private double computeLoss(List<double[]> featuresList, List<Double> labels) {
+        if (featuresList.size() != labels.size())
             throw new IllegalArgumentException("Features/labels size mismatch");
-        }
         double loss = 0.0;
         for (int i = 0; i < featuresList.size(); i++) {
             double p = predictFromFeatures(featuresList.get(i));
@@ -393,6 +391,10 @@ public class LocalModel extends Model {
         f[idx++] = accelSymmetry(dY);
         f[idx++] = accelSymmetry(dP);
         f[idx++] = crossCorrLag(dY, dP);
+
+        f[idx++] = phaseStability(dY, dP);
+        f[idx++] = periodicityScore(dY);
+        f[idx++] = periodicityScore(dP);
 
         return f;
     }
@@ -521,7 +523,6 @@ public class LocalModel extends Model {
         }
     }
 
-    private double clip(double g)      { return Math.max(-5, Math.min(5, g)); }
     private double relu(double x)      { return x > 0 ? x : 0; }
     private double reluDeriv(double x) { return x > 0 ? 1 : 0; }
     private double sigmoid(double x) {
@@ -640,5 +641,31 @@ public class LocalModel extends Model {
             if (corr > bestCorr) { bestCorr = corr; bestLag = lag; }
         }
         return bestLag;
+    }
+
+    private double phaseStability(double[] y, double[] p) {
+        if (y.length < 4) return 0;
+        double[] dAngle = new double[y.length - 1];
+        double prevAngle = Math.atan2(p[0], y[0]);
+        for (int i = 1; i < y.length; i++) {
+            double angle = Math.atan2(p[i], y[i]);
+            double d = angle - prevAngle;
+            while (d >  Math.PI) d -= 2 * Math.PI;
+            while (d < -Math.PI) d += 2 * Math.PI;
+            dAngle[i - 1] = d;
+            prevAngle = angle;
+        }
+        double m = mean(dAngle);
+        return std(dAngle, m);
+    }
+
+    private double periodicityScore(double[] v) {
+        if (v.length < 8) return 0;
+        double maxAc = 0;
+        for (int lag = 2; lag <= v.length / 3; lag++) {
+            double ac = Math.abs(autocorr(v, lag));
+            if (ac > maxAc) maxAc = ac;
+        }
+        return maxAc;
     }
 }

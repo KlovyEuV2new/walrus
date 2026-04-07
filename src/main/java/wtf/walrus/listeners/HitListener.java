@@ -29,7 +29,9 @@ import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.protocol.player.User;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
+import wtf.walrus.Main;
 import wtf.walrus.checks.impl.ai.AICheck;
+import wtf.walrus.config.Config;
 import wtf.walrus.data.DataType;
 import wtf.walrus.session.ISessionManager;
 import org.bukkit.Bukkit;
@@ -82,6 +84,7 @@ public class HitListener extends PacketListenerAbstract {
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
         try {
+            Config config = Main.instance.getPluginConfig();
             if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY) {
                 return;
             }
@@ -96,11 +99,12 @@ public class HitListener extends PacketListenerAbstract {
             }
             int targetId = packet.getEntityId();
             Player target = getPlayerById(targetId);
-            if (target == null) {
+            if (target == null && config.isAiOnlyPlayers()) {
                 return;
             }
             if (aiCheck != null) {
-                aiCheck.onAttack(attacker, target);
+                if (target != null) aiCheck.onAttack(attacker, target);
+                else aiCheck.onAttack(attacker, targetId, false);
             }
             sessionManager.onAttack(attacker, DataType.AIM);
         } catch (Exception e) {

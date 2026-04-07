@@ -184,7 +184,7 @@ public class ViolationManager {
             data.setDamageVerdict(new DamageVerdict(probability, System.currentTimeMillis()));
             data.ticksSinceVerdict = 0;
         }
-        if (checkType.equals(CheckType.DIG) && config.isDigVerdict()) {
+        if (checkType.equals(CheckType.BLOCK) && config.isDigVerdict()) {
             miningData.setDamageVerdict(new DamageVerdict(probability, System.currentTimeMillis()));
             miningData.ticksSinceVerdict = 0;
         }

@@ -46,6 +46,8 @@ detection:
   local-mode: true
   mining:
     enabled: true
+    block-place: true
+    block-dig: true
 
   # AI server endpoint (ignored when local-mode: true)
   endpoint: "https://api.mlsac.wtf"
@@ -78,7 +80,9 @@ detection:
 
   # Smart damage cancellation that depends on the probability
   damage-verdict: false
-  dig-verdict: false
+  block-verdict: false
+
+  only-players: false # true
 
   # Model settings (remote mode only — ignored when local-mode: true)
   # Each model can have:
@@ -189,8 +193,7 @@ penalties:
   # Actions by violation level
   actions: []
     #1: "{KICK} kick {PLAYER} MLSAC Detection (VL:{VL})"
-    #2: "{BAN} ban {PLAYER} Cheating (MLSAC VL:{VL})"
-    #2-0,9: "{BAN} ban {PLAYER} Cheating (MLSAC VL:{VL}) prob >0.9"
+  #2-0,9: "{BAN} kick {PLAYER} Cheating (MLSAC VL:{VL}) prob >0.9"
   #
   # Also you could use:
   #   1: "{CUSTOM_ALERT} &c{PLAYER} &7is suspicious &8(&fVL:&e{VL}&8, &fProb:&e{PROBABILITY}&8)"

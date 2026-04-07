@@ -26,11 +26,13 @@ import org.bukkit.plugin.java.JavaPlugin;
 import wtf.walrus.Main;
 
 import wtf.walrus.Permissions;
+import wtf.walrus.checks.CheckType;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.HologramConfig;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.MiningPlayerData;
+import wtf.walrus.ml.managers.VerdictManager;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 
@@ -42,6 +44,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import wtf.walrus.util.FastMath;
 
 public class NametagManager extends PacketListenerAbstract implements Listener {
 
@@ -96,6 +99,16 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 || player.hasPermission(Permissions.ALERTS);
     }
 
+    private double getVersionedOffset(Player viewer, double baseOffset) {
+        ClientVersion clientVersion = PacketEvents.getAPI()
+                .getPlayerManager().getClientVersion(viewer);
+        int version = clientVersion != null ? clientVersion.getProtocolVersion() : 770;
+        if (version < 755) {
+            return baseOffset - 1.8;
+        }
+        return baseOffset;
+    }
+
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
         try {
@@ -123,16 +136,17 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             if (viewers == null)
                 return;
 
-            for (int i = 0; i < entityIds.length; i++) {
-                double lineY = pos.getY() + baseOffset + (entityIds.length - 1 - i) * LINE_GAP;
-                WrapperPlayServerEntityTeleport teleport = new WrapperPlayServerEntityTeleport(
-                        entityIds[i], new Vector3d(pos.getX(), lineY, pos.getZ()), 0f, 0f, false);
+            for (UUID viewerId : viewers) {
+                Player viewer = Bukkit.getPlayer(viewerId);
+                if (viewer == null || !viewer.isOnline() || !hasViewPermission(viewer))
+                    continue;
 
-                for (UUID viewerId : viewers) {
-                    Player viewer = Bukkit.getPlayer(viewerId);
-                    if (viewer != null && viewer.isOnline() && hasViewPermission(viewer)) {
-                        PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, teleport);
-                    }
+                double versionedOffset = getVersionedOffset(viewer, baseOffset);
+                for (int i = 0; i < entityIds.length; i++) {
+                    double lineY = pos.getY() + versionedOffset + (entityIds.length - 1 - i) * LINE_GAP;
+                    WrapperPlayServerEntityTeleport teleport = new WrapperPlayServerEntityTeleport(
+                            entityIds[i], new Vector3d(pos.getX(), lineY, pos.getZ()), 0f, 0f, false);
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, teleport);
                 }
             }
         } catch (Exception ignored) {
@@ -223,13 +237,51 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             mineHistoryStr = sb.toString().trim();
         }
 
+        VerdictManager verdictManager = Main.instance.getVerdictManager();
+
+        UUID uuid = target.getUniqueId();
+        CheckType lastType = verdictManager.getLastVerdict(uuid);
+        Object lastClass = verdictManager.getLastClass(uuid);
+
+        boolean invalidLast = false;
+        List<Double> lastHistory = new ArrayList<>();
+        String lastHistStr = "-";
+        double lastAvg = 0;
+        if (lastClass instanceof AICheck) {
+            lastAvg = data.getFormatedAverageProbability();
+            lastHistory = data.getFormatedProbabilityHistory();
+
+            if (!history.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (Double val : history) {
+                    sb.append(getColorInfo(val)).append(" ");
+                }
+                lastHistStr = sb.toString().trim();
+            }
+        } else if (lastClass instanceof MiningCheck) {
+            lastAvg = miningData.getFormatedAverageProbability();
+            lastHistory = miningData.getFormatedProbabilityHistory();
+
+            if (!mineHistory.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (Double val : mineHistory) {
+                    sb.append(getColorInfo(val)).append(" ");
+                }
+                lastHistStr = sb.toString().trim();
+            }
+        } else invalidLast = true;
+
         String filled = format
+                .replace("{LAST}", lastType.name())
                 .replace("{AVG}", String.format("%.4f", avgProb))
                 .replace("{MINE_AVG}", String.format("%.4f", mineAvgProb))
                 .replace("{MINE_AVG_COLORED}", getColorInfo(mineAvgProb))
                 .replace("{MINE_HISTORY}", mineHistoryStr)
                 .replace("{AVG_COLORED}", getColorInfo(avgProb))
-                .replace("{HISTORY}", historyStr);
+                .replace("{HISTORY}", historyStr)
+                .replace("{LAST_AVG}", String.format("%.4f", lastAvg))
+                .replace("{LAST_AVG_COLORED}", getColorInfo(lastAvg))
+                .replace("{LAST_HISTORY}", lastHistStr);
 
         String[] lines = filled.split("\\{NL\\}", -1);
 
@@ -288,8 +340,10 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         Set<UUID> viewers = viewersMap.computeIfAbsent(target.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
         boolean isNew = viewers.add(viewer.getUniqueId());
 
+        double versionedOffset = getVersionedOffset(viewer, baseOffset);
+
         for (int i = 0; i < entityIds.length; i++) {
-            double lineY = baseLoc.getY() + baseOffset + (entityIds.length - 1 - i) * LINE_GAP;
+            double lineY = baseLoc.getY() + versionedOffset + (entityIds.length - 1 - i) * LINE_GAP;
             Vector3d linePos = new Vector3d(baseLoc.getX(), lineY, baseLoc.getZ());
 
             if (isNew) {
@@ -304,8 +358,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             }
 
             if (isNew || textChanged) {
-                List<EntityData<?>> metadata =
-                        getVersionedMetadata(viewer, lines[i]);
+                List<EntityData<?>> metadata = getVersionedMetadata(viewer, lines[i]);
                 WrapperPlayServerEntityMetadata metadataPacket =
                         new WrapperPlayServerEntityMetadata(entityIds[i], metadata);
                 PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
@@ -366,8 +419,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         }
     }
 
-    private List<EntityData<?>> getVersionedMetadata(
-            Player viewer, String text) {
+    private List<EntityData<?>> getVersionedMetadata(Player viewer, String text) {
         List<EntityData<?>> metadata = new ArrayList<>();
         ClientVersion clientVersion = PacketEvents.getAPI()
                 .getPlayerManager().getClientVersion(viewer);
@@ -435,7 +487,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     public static String getColorInfo(double val) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = String.format("%.4f", val);
+        String fmt = FastMath.format(val, 4);
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;
@@ -445,12 +497,12 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     public static String getColorInfoFull(double val) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = String.format("%.4f", val);
+        String fmt = FastMath.format(val, 4);
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;
         if (val < 0.9) return holo.getColorCritical()  + fmt;
-        if (val > 0.99999) return holo.getColorCriticalBold() + val;
+        if (val > 0.9999) return holo.getColorCriticalBold() + val;
         return             holo.getColorCriticalBold() + fmt;
     }
 }

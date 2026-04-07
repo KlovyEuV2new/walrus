@@ -28,9 +28,10 @@ import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.protocol.player.User;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
-import wtf.walrus.checks.impl.ai.AICheck;
+import org.bukkit.command.PluginCommand;
+import wtf.walrus.Main;
 import wtf.walrus.checks.impl.ai.MiningCheck;
+import wtf.walrus.config.Config;
 import wtf.walrus.data.DataType;
 import wtf.walrus.session.ISessionManager;
 import org.bukkit.Bukkit;
@@ -39,12 +40,12 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DigListener extends PacketListenerAbstract {
+public class BlockListener extends PacketListenerAbstract {
     private final ISessionManager sessionManager;
     private final MiningCheck miningCheck;
     private final Map<Integer, UUID> playerIdCache = new ConcurrentHashMap<>();
 
-    public DigListener(ISessionManager sessionManager, MiningCheck aiCheck) {
+    public BlockListener(ISessionManager sessionManager, MiningCheck aiCheck) {
         super(PacketListenerPriority.NORMAL);
         this.sessionManager = sessionManager;
         this.miningCheck = aiCheck;
@@ -83,9 +84,12 @@ public class DigListener extends PacketListenerAbstract {
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
         try {
-            if (event.getPacketType() != PacketType.Play.Client.PLAYER_DIGGING) {
+            Config config = Main.instance.getPluginConfig();
+            if (event.getPacketType() != PacketType.Play.Client.PLAYER_DIGGING && event.getPacketType() != PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 return;
             }
+            if ((event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING && !config.isAiDig())
+                    || (event.getPacketType() == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT && !config.isAiPlace())) return;
             User user = event.getUser();
             Player attacker = (Player) event.getPlayer();
             if (attacker == null) {
@@ -94,7 +98,7 @@ public class DigListener extends PacketListenerAbstract {
             if (miningCheck != null) {
                 miningCheck.onDig(attacker);
             }
-            sessionManager.onAttack(attacker, DataType.DIG);
+            sessionManager.onAttack(attacker, DataType.BLOCK);
         } catch (Exception e) {
         }
     }

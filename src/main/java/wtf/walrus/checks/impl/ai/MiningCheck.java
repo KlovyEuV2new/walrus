@@ -234,7 +234,6 @@ public class MiningCheck {
                                 error -> handleError(playerName, data, error)
                         );
             }
-
         } catch (Exception e) {
             logger.warning("[AI] Unexpected error in sendDataToAI: " + e.getMessage());
             e.printStackTrace();
@@ -275,19 +274,21 @@ public class MiningCheck {
             }
 
             if (alertManager.shouldAlert(probability)) {
-                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName, CheckType.DIG);
+                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName, CheckType.BLOCK);
             }
 
             if (!isOnlyAlert && data.shouldFlag(config.getAiBufferFlag())) {
                 Player player = Bukkit.getPlayer(playerUuid);
                 if (player != null && player.isOnline()) {
-                    violationManager.handleFlag(player, probability, data.getBuffer(), CheckType.DIG);
+                    violationManager.handleFlag(player, probability, data.getBuffer(), CheckType.BLOCK);
                 } else {
                     logger.warning("[AI] Player " + playerName
                             + " went offline before punishment");
                 }
                 data.resetBuffer(config.getAiBufferResetOnFlag());
             }
+
+            plugin.getVerdictManager().setVerdict(playerUuid, CheckType.BLOCK);
         });
     }
 

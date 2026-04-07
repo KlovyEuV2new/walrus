@@ -96,7 +96,33 @@ public class AICheck {
 
     public void onAttack(Player player, Entity target) {
         if (!config.isAiEnabled()) return;
-        if (!(target instanceof Player)) return;
+        if (!(target instanceof Player) && config.isAiOnlyPlayers()) return;
+        if (worldGuardCompat.shouldBypassAICheck(player)) {
+            plugin.debug("[AI] Skipping attack for " + player.getName() + " - in disabled WorldGuard region");
+            return;
+        }
+        if (!player.isValid()) return;
+
+        schedulerAdapter.runEntitySync(player, () -> {
+            AIPlayerData data = getOrCreatePlayerData(player);
+            if (data.isBedrock()) {
+                plugin.debug("[AI] Skipping attack for " + player.getName() + " - Bedrock player");
+                return;
+            }
+            if (!data.isInCombat()) {
+                data.clearBuffer();
+                data.getAimProcessor().reset();
+                plugin.debug("[AI] New combat for " + player.getName() + ", cleared old data");
+            }
+            data.onAttack();
+            plugin.debug("[AI] Attack registered for " + player.getName() +
+                    ", buffer=" + data.getBufferSize() + "/" + sequence);
+        });
+    }
+
+    public void onAttack(Player player, int entityId, boolean isPlayer) {
+        if (!config.isAiEnabled()) return;
+        if (!isPlayer && config.isAiOnlyPlayers()) return;
         if (worldGuardCompat.shouldBypassAICheck(player)) {
             plugin.debug("[AI] Skipping attack for " + player.getName() + " - in disabled WorldGuard region");
             return;
@@ -236,7 +262,6 @@ public class AICheck {
                                 error -> handleError(playerName, data, error)
                         );
             }
-
         } catch (Exception e) {
             logger.warning("[AI] Unexpected error in sendDataToAI: " + e.getMessage());
             e.printStackTrace();
@@ -290,6 +315,8 @@ public class AICheck {
                 }
                 data.resetBuffer(config.getAiBufferResetOnFlag());
             }
+
+            plugin.getVerdictManager().setVerdict(playerUuid, CheckType.AIM);
         });
     }
 

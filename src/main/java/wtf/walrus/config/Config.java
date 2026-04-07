@@ -38,6 +38,8 @@ public class Config {
     private final double aiPunishmentMinProbability;
     private final Map<Integer, String> punishmentCommands;
     private final boolean animationEnabled;
+    private final boolean aiOnlyPlayers;
+    private final boolean aiPlace, aiDig;
 
     // ── Local ML mode ─────────────────────────────────────────────────────────
     private final boolean localModeEnabled;
@@ -200,6 +202,9 @@ public class Config {
         this.damageVerdict = false;
         this.oneProbPunishment = false;
         this.digVerdict = false;
+        this.aiOnlyPlayers = true;
+        this.aiPlace = true;
+        this.aiDig = true;
     }
 
     private static Set<String> createDefaultCheatReasons() {
@@ -230,6 +235,7 @@ public class Config {
         this.aiEnabled = config.getBoolean("detection.enabled",
                 config.getBoolean("ai.enabled", DEFAULT_AI_ENABLED));
         this.miningAiEnabled = config.getBoolean("detection.mining.enabled", config.getBoolean("ai.mining.enabled", false));
+        this.aiOnlyPlayers = config.getBoolean("detection.only-players", true);
 
         this.aiApiKey = config.getString("detection.api-key",
                 config.getString("ai.api-key", DEFAULT_AI_API_KEY));
@@ -264,7 +270,7 @@ public class Config {
         // ── Local ML mode ─────────────────────────────────────────────────────
         this.localModeEnabled = config.getBoolean("detection.local-mode", DEFAULT_LOCAL_MODE);
         this.damageVerdict = config.getBoolean("detection.damage-verdict", false);
-        this.digVerdict = config.getBoolean("detection.dig-verdict", false);
+        this.digVerdict = config.getBoolean("detection.block-verdict", false);
 
         // ── Punishment commands ───────────────────────────────────────────────
         this.punishmentCommands = new HashMap<>();
@@ -368,7 +374,8 @@ public class Config {
         this.analyticsMinDetections = config.getInt("analytics.min-detections", DEFAULT_ANALYTICS_MIN_DETECTIONS);
         this.analyticsColorGreenMax = config.getInt("analytics.colors.green", DEFAULT_ANALYTICS_COLOR_GREEN_MAX);
         this.analyticsColorOrangeMax = config.getInt("analytics.colors.orange", DEFAULT_ANALYTICS_COLOR_ORANGE_MAX);
-
+        this.aiPlace = config.getBoolean("detection.mining.block-place", true);
+        this.aiDig = config.getBoolean("detection.mining.block-dig", true);
     }
 
     private double clampThreshold(double value, String configPath, Logger logger) {
@@ -493,5 +500,17 @@ public class Config {
 
     public boolean isDigVerdict() {
         return digVerdict;
+    }
+
+    public boolean isAiOnlyPlayers() {
+        return aiOnlyPlayers;
+    }
+
+    public boolean isAiPlace() {
+        return aiPlace;
+    }
+
+    public boolean isAiDig() {
+        return aiDig;
     }
 }
