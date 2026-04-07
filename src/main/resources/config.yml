@@ -46,6 +46,8 @@ detection:
   local-mode: true
   mining:
     enabled: true
+    block-dig: true
+    block-place: true
 
   # AI server endpoint (ignored when local-mode: true)
   endpoint: "https://api.mlsac.wtf"
@@ -78,7 +80,9 @@ detection:
 
   # Smart damage cancellation that depends on the probability
   damage-verdict: false
-  dig-verdict: false
+  block-verdict: false
+
+  only-players: false
 
   # Model settings (remote mode only — ignored when local-mode: true)
   # Each model can have:
