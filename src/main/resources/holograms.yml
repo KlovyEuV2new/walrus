@@ -1,6 +1,15 @@
 # Configuration for Suspect Nametags (ArmorStands)
 nametags:
   enabled: true
+
+  # Включайте если у вас проблемы с позицией голограммы.
+  #
+  # Например:
+  #  У вас сервер 1.21, а игрок играет с 1.16.5 (ViaBackwards)
+  #  в таком случае бывает что голограмма слишком высоко.
+  #
+  versioned-offset: false
+
   format: "&8{LAST_HISTORY}{NL}&fAVG: {LAST_AVG_COLORED} &f(&#85AEDB{LAST}&f)"
   height_offset: 2.3
   update_interval_ticks: 1

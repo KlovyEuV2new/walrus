@@ -85,26 +85,32 @@ public class HitListener extends PacketListenerAbstract {
     public void onPacketReceive(PacketReceiveEvent event) {
         try {
             Config config = Main.instance.getPluginConfig();
-            if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY) {
+            if (event.getPacketType() != PacketType.Play.Client.INTERACT_ENTITY && event.getPacketType() != PacketType.Play.Client.USE_ITEM) {
                 return;
             }
             User user = event.getUser();
-            WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
-            if (packet.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
-                return;
-            }
             Player attacker = (Player) event.getPlayer();
             if (attacker == null) {
                 return;
             }
-            int targetId = packet.getEntityId();
-            Player target = getPlayerById(targetId);
-            if (target == null && config.isAiOnlyPlayers()) {
-                return;
+            if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
+                WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
+                if (packet.getAction() != WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
+                    return;
+                }
+                int targetId = packet.getEntityId();
+                Player target = getPlayerById(targetId);
+                if (target == null && config.isAiOnlyPlayers()) {
+                    return;
+                }
+                if (aiCheck != null) {
+                    if (target != null) aiCheck.onAttack(attacker, target);
+                    else aiCheck.onAttack(attacker, targetId, false);
+                }
             }
-            if (aiCheck != null) {
-                if (target != null) aiCheck.onAttack(attacker, target);
-                else aiCheck.onAttack(attacker, targetId, false);
+            if (event.getPacketType() == PacketType.Play.Client.USE_ITEM) {
+                if (!config.isUseItemAi()) return;
+                if (aiCheck != null) aiCheck.onAttack(attacker, -1, false);
             }
             sessionManager.onAttack(attacker, DataType.AIM);
         } catch (Exception e) {

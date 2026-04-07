@@ -90,6 +90,7 @@ public class Config {
     private final int analyticsColorOrangeMax;
     private final boolean damageVerdict, digVerdict;
     public final boolean oneProbPunishment;
+    private final boolean useItemAi;
 
     // ── Defaults ──────────────────────────────────────────────────────────────
     public static final boolean DEFAULT_DEBUG = false;
@@ -205,6 +206,7 @@ public class Config {
         this.aiOnlyPlayers = true;
         this.aiPlace = true;
         this.aiDig = true;
+        this.useItemAi = false;
     }
 
     private static Set<String> createDefaultCheatReasons() {
@@ -236,6 +238,7 @@ public class Config {
                 config.getBoolean("ai.enabled", DEFAULT_AI_ENABLED));
         this.miningAiEnabled = config.getBoolean("detection.mining.enabled", config.getBoolean("ai.mining.enabled", false));
         this.aiOnlyPlayers = config.getBoolean("detection.only-players", true);
+        this.useItemAi = config.getBoolean("detection.use-item", false);
 
         this.aiApiKey = config.getString("detection.api-key",
                 config.getString("ai.api-key", DEFAULT_AI_API_KEY));
@@ -512,5 +515,9 @@ public class Config {
 
     public boolean isAiDig() {
         return aiDig;
+    }
+
+    public boolean isUseItemAi() {
+        return useItemAi;
     }
 }

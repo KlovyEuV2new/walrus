@@ -28,14 +28,14 @@ detection:
   # │  model instead of the remote SignalR server. No api-key or endpoint needed. │
   # │                                                                             │
   # │  Workflow:                                                                  │
-  # │    1. Collect data:  /walrus start <player> CHEAT|LEGIT                     │
-  # │                      /walrus stop <player>                                   │
+  # │    1. Collect data:  /mlsac start <player> CHEAT|LEGIT                     │
+  # │                      /mlsac stop <player>                                   │
   # │       CSV files are saved to: <plugin>/mls/data/                           │
   # │                                                                             │
-  # │    2. Train model:   /walrus train [epochs]    (default: 50 epochs)         │
-  # │       Trained weights: <plugin>/mls/local.bin                              │
+  # │    2. Train model:   /mlsac train [epochs]    (default: 50 epochs)         │
+  # │       Trained weights: <plugin>/mls/model.bin                              │
   # │                                                                             │
-  # │    3. Check status:  /walrus localstatus                                    │
+  # │    3. Check status:  /mlsac localstatus                                    │
   # │                                                                             │
   # │  Tips:                                                                      │
   # │    - Collect at least 100+ ticks of CHEAT and LEGIT data before training   │
@@ -46,8 +46,9 @@ detection:
   local-mode: true
   mining:
     enabled: true
-    block-dig: true
     block-place: true
+    block-dig: true
+  use-item: false
 
   # AI server endpoint (ignored when local-mode: true)
   endpoint: "https://api.mlsac.wtf"
@@ -75,8 +76,7 @@ detection:
     enabled: true
     # List of regions where AI check is disabled.
     # Format: "world:region" or just "region" (applies to all worlds)
-    disabled-regions:
-      - "spawn:spawn"
+    disabled-regions: []
 
   # Smart damage cancellation that depends on the probability
   damage-verdict: false
@@ -107,16 +107,6 @@ detection:
       only-alert: false
 
 # ┌───────────────────────────────────────────────────────────────────────────────┐
-# │                              CHECK SETTINGS                                   │
-# └───────────────────────────────────────────────────────────────────────────────┘
-checks:
-  AimA:
-    enabled: true
-    alert-per: 5
-    vl-decay: 120
-  # other checks
-
-# ┌───────────────────────────────────────────────────────────────────────────────┐
 # │                              ALERT SETTINGS                                   │
 # └───────────────────────────────────────────────────────────────────────────────┘
 # Guide https://mlsac.wtf/dashboard/wiki
@@ -139,8 +129,6 @@ violation:
   # reset-value should be /2 of threshold
   reset-value: 20
 
-  one-prob-punish: false
-
   # Buffer increase multiplier: (probability - threshold) * multiplier
   # Example: prob 1.0 with threshold 0.70 = (1.0 - 0.70) * 100 = 30 buffer
   multiplier: 100.0
@@ -155,9 +143,19 @@ violation:
     # Enable automatic VL decay
     enabled: true
     # Check interval in seconds (how often to check and reduce VL)
-    interval: 60
+    interval: 30
     # Amount of VL to reduce per interval
     amount: 1
+
+# ┌───────────────────────────────────────────────────────────────────────────────┐
+# │                              CHECK SETTINGS                                   │
+# └───────────────────────────────────────────────────────────────────────────────┘
+checks:
+  BadPacketsA:
+    enabled: true
+    alert-per: 5
+    vl-decay: 120
+  # other checks
 
 # ┌───────────────────────────────────────────────────────────────────────────────┐
 # │                            PENALTY SETTINGS                                   │
@@ -181,7 +179,7 @@ violation:
 penalties:
   # Minimum probability required for penalty execution
   # Do not change unless you know what you are doing
-  min-probability: 0.01
+  min-probability: 0.01 # 0.01
 
   # Ban animation settings
   # Epic animation: levitation + purple/pink particles + lightning strike
@@ -192,9 +190,7 @@ penalties:
 
   # Actions by violation level
   actions: []
-    #1: "{KICK} kick {PLAYER} MLSAC Detection (VL:{VL})"
-    #2: "{BAN} ban {PLAYER} Cheating (MLSAC VL:{VL})"
-    #2-0,9: "{BAN} ban {PLAYER} Cheating (MLSAC VL:{VL}) prob >0.9"
+  #"5": "{KICK} kick {PLAYER} &cОбрануженно постороннее по. -sender-name=&#8B6BE7NetVision"
   #
   # Also you could use:
   #   1: "{CUSTOM_ALERT} &c{PLAYER} &7is suspicious &8(&fVL:&e{VL}&8, &fProb:&e{PROBABILITY}&8)"

@@ -27,7 +27,9 @@ import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
 import com.github.retrooper.packetevents.protocol.player.User;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
 import org.bukkit.command.PluginCommand;
 import wtf.walrus.Main;
 import wtf.walrus.checks.impl.ai.MiningCheck;
@@ -90,6 +92,11 @@ public class BlockListener extends PacketListenerAbstract {
             }
             if ((event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING && !config.isAiDig())
                     || (event.getPacketType() == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT && !config.isAiPlace())) return;
+            if (event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING) {
+                WrapperPlayClientPlayerDigging wrapper = new WrapperPlayClientPlayerDigging(event);
+                if (wrapper.getAction() != DiggingAction.FINISHED_DIGGING && wrapper.getAction() != DiggingAction.CANCELLED_DIGGING
+                        && wrapper.getAction() != DiggingAction.START_DIGGING) return;
+            }
             User user = event.getUser();
             Player attacker = (Player) event.getPlayer();
             if (attacker == null) {

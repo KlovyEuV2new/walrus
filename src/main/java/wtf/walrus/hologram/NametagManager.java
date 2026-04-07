@@ -141,7 +141,9 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 if (viewer == null || !viewer.isOnline() || !hasViewPermission(viewer))
                     continue;
 
-                double versionedOffset = getVersionedOffset(viewer, baseOffset);
+                HologramConfig hologramConfig = Main.instance.getHologramConfig();
+                double versionedOffset = baseOffset;
+                if (hologramConfig.isVersionedOffset()) versionedOffset = getVersionedOffset(viewer, baseOffset);
                 for (int i = 0; i < entityIds.length; i++) {
                     double lineY = pos.getY() + versionedOffset + (entityIds.length - 1 - i) * LINE_GAP;
                     WrapperPlayServerEntityTeleport teleport = new WrapperPlayServerEntityTeleport(
@@ -340,7 +342,9 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         Set<UUID> viewers = viewersMap.computeIfAbsent(target.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
         boolean isNew = viewers.add(viewer.getUniqueId());
 
-        double versionedOffset = getVersionedOffset(viewer, baseOffset);
+        HologramConfig hologramConfig = Main.instance.getHologramConfig();
+        double versionedOffset = baseOffset;
+        if (hologramConfig.isVersionedOffset()) versionedOffset = getVersionedOffset(viewer, baseOffset);
 
         for (int i = 0; i < entityIds.length; i++) {
             double lineY = baseLoc.getY() + versionedOffset + (entityIds.length - 1 - i) * LINE_GAP;
