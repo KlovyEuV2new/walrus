@@ -217,21 +217,41 @@ public class CheckManagerListener extends PacketListenerAbstract {
             player.openWindowID = wrapper.getContainerId();
         } else if (type == PacketType.Play.Server.ENTITY_METADATA) {
             WrapperPlayServerEntityMetadata wrapper = new WrapperPlayServerEntityMetadata(event);
+
             if (wrapper.getEntityId() == player.user.getEntityId()) {
-                EntityData<?> watchable = WatchableIndexUtil.getIndex(wrapper.getEntityMetadata(), 0);
-                if (watchable != null) {
-                    byte field = (byte) watchable.getValue();
-                    player.wasGliding = player.isGliding;
-                    player.wasSwimming = player.isSwimming;
-                    player.isGliding = (field & 0x80) != 0 && player.user.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_9);
-                    player.isSwimming = (field & 0x10) != 0;
+                for (EntityData<?> data : wrapper.getEntityMetadata()) {
+
+                    int index = data.getIndex();
+                    Object value = data.getValue();
+
+                    if (index == 0) {
+                        byte field = toByte(value);
+
+                        player.wasGliding = player.isGliding;
+                        player.wasSwimming = player.isSwimming;
+
+                        player.isGliding = (field & 0x80) != 0
+                                && player.user.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_9);
+
+                        player.isSwimming = (field & 0x10) != 0;
+                    }
+
+                    else if (index == MetadataIndex.HEALTH) {
+                        player.health = toFloat(value);
+                    }
+
+                    else if (index == MetadataIndex.ABSORPTION) {
+                        player.absorption = toFloat(value);
+                    }
+
+                    else if (index == MetadataIndex.XP) {
+                        player.xp = toInt(value);
+                    }
+
+                    else if (index == MetadataIndex.AIR_TICKS) {
+                        player.airTicks = toInt(value);
+                    }
                 }
-                wrapper.getEntityMetadata().stream().filter(d -> d.getIndex() == MetadataIndex.HEALTH)
-                        .findFirst().ifPresent(d -> player.health = (float) d.getValue());
-                wrapper.getEntityMetadata().stream().filter(d -> d.getIndex() == MetadataIndex.ABSORPTION)
-                        .findFirst().ifPresent(d -> player.absorption = (float) d.getValue());
-                wrapper.getEntityMetadata().stream().filter(d -> d.getIndex() == MetadataIndex.XP)
-                        .findFirst().ifPresent(d -> player.xp = (int) d.getValue());
             }
         } else if (type == PacketType.Play.Server.SET_PASSENGERS) {
             WrapperPlayServerSetPassengers mount = new WrapperPlayServerSetPassengers(event);
@@ -258,6 +278,18 @@ public class CheckManagerListener extends PacketListenerAbstract {
         return () -> {
             new WalrusPlayer(user, user.getUUID());
         };
+    }
+
+    public static int toInt(Object o) {
+        return o instanceof Number n ? n.intValue() : 0;
+    }
+
+    public static float toFloat(Object o) {
+        return o instanceof Number n ? n.floatValue() : 0f;
+    }
+
+    public static byte toByte(Object o) {
+        return o instanceof Number n ? n.byteValue() : 0;
     }
 
     private void handleVehicleUpdate(WalrusPlayer player, PacketSendEvent event, int vehicleID, int[] passengers) {

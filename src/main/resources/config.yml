@@ -82,7 +82,7 @@ detection:
   damage-verdict: false
   block-verdict: false
 
-  only-players: false
+  only-players: true
 
   # Model settings (remote mode only — ignored when local-mode: true)
   # Each model can have:

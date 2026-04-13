@@ -31,6 +31,7 @@ import wtf.walrus.checks.CheckType;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.MessagesConfig;
 import wtf.walrus.hologram.NametagManager;
+import wtf.walrus.ml.impl.LocalModel;
 import wtf.walrus.scheduler.SchedulerAdapter;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.util.ColorUtil;
@@ -94,7 +95,7 @@ public class AlertManager {
     }
 
     public void sendAlert(String suspectName, double probability, double buffer) {
-        sendAlert(suspectName, probability, buffer, null, CheckType.UNKNOWN);
+        sendAlert(suspectName, probability, buffer, null, new String[]{"unknown"}, CheckType.UNKNOWN);
     }
 
     public void sendAlert(String suspectName, int vl, double buffer, String checkName, String verbose) {
@@ -112,8 +113,8 @@ public class AlertManager {
         });
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, String modelName, CheckType checkType) {
-        String message = formatAlertMessage(suspectName, probability, buffer, modelName, checkType);
+    public void sendAlert(String suspectName, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType) {
+        String message = formatAlertMessage(suspectName, probability, buffer, modelName, bestNames, checkType);
         scheduler.runSync(() -> {
             for (UUID uuid : playersWithAlerts) {
                 Player player = Bukkit.getPlayer(uuid);
@@ -128,11 +129,11 @@ public class AlertManager {
     }
 
     public void sendAlert(String suspectName, double probability, double buffer, int vl) {
-        sendAlert(suspectName, probability, buffer, vl, null, CheckType.UNKNOWN);
+        sendAlert(suspectName, probability, buffer, vl, null, new String[]{"unknown"}, CheckType.UNKNOWN);
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName, CheckType checkType) {
-        String message = formatAlertMessage(suspectName, probability, buffer, vl, modelName, checkType);
+    public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName, String[] bestNames, CheckType checkType) {
+        String message = formatAlertMessage(suspectName, probability, buffer, vl, modelName, bestNames, checkType);
         scheduler.runSync(() -> {
             for (UUID uuid : playersWithAlerts) {
                 Player player = Bukkit.getPlayer(uuid);
@@ -164,6 +165,22 @@ public class AlertManager {
         return getPrefix() + ColorUtil.colorize(template);
     }
 
+    private String formatAlertMessage(String suspectName, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType) {
+        String pc = NametagManager.getColorInfo(probability);
+        String template = messagesConfig.getMessage("alert-format", suspectName, probability, pc, buffer, 0);
+        String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
+        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
+                .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
+        int IN = LocalModel.IN;
+        for (int i = 0; i < IN; i++) {
+            String value = (i < bestNames.length) ? bestNames[i] : "unknown";
+            template = template.replace("{BEST_" + i + "}", value)
+                    .replace("<best_" + i + ">", value);
+        }
+        return getPrefix() + ColorUtil.colorize(template);
+    }
+
     private String formatAlertMessage(String suspectName, double probability, double buffer, int vl, String modelName, CheckType checkType) {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format-vl", suspectName, probability, pc, buffer, vl);
@@ -171,6 +188,22 @@ public class AlertManager {
         String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
+        return getPrefix() + ColorUtil.colorize(template);
+    }
+
+    private String formatAlertMessage(String suspectName, double probability, double buffer, int vl, String modelName, String[] bestNames, CheckType checkType) {
+        String pc = NametagManager.getColorInfo(probability);
+        String template = messagesConfig.getMessage("alert-format-vl", suspectName, probability, pc, buffer, vl);
+        String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
+        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
+                .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
+        int IN = LocalModel.IN;
+        for (int i = 0; i < IN; i++) {
+            String value = (i < bestNames.length) ? bestNames[i] : "unknown";
+            template = template.replace("{BEST_" + i + "}", value)
+                    .replace("<best_" + i + ">", value);
+        }
         return getPrefix() + ColorUtil.colorize(template);
     }
 

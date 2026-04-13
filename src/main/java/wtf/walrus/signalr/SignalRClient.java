@@ -24,6 +24,7 @@
 package wtf.walrus.signalr;
 
 import org.bukkit.plugin.java.JavaPlugin;
+import wtf.walrus.ml.MLOut;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIResponse;
@@ -337,7 +338,7 @@ public class SignalRClient implements IAIClient {
                 .concatMap(result -> {
                     if (result.isSuccess()) {
                         return io.reactivex.rxjava3.core.Observable.just(
-                                new AIResponse(result.getProbability(), null, result.getModel()));
+                                new AIResponse(new MLOut(result.getProbability(), new String[]{"unknown"}), null, result.getModel()));
                     }
                     String errorCode = result.getErrorCode();
                     if (HubErrorParser.requiresReportStats(errorCode)) {
@@ -388,7 +389,7 @@ public class SignalRClient implements IAIClient {
                     return sessionManager.predict(playerData, playerUuid, playerName)
                             .map(result -> {
                                 if (result.isSuccess()) {
-                                    return new AIResponse(result.getProbability(), null, result.getModel());
+                                    return new AIResponse(new MLOut(result.getProbability(), new String[]{"unknown"}), null, result.getModel());
                                 }
                                 throw new RuntimeException(result.getErrorCode() + ": " + result.getErrorMessage());
                             });
@@ -403,7 +404,7 @@ public class SignalRClient implements IAIClient {
                     return sessionManager.predict(playerData, playerUuid, playerName)
                             .map(result -> {
                                 if (result.isSuccess()) {
-                                    return new AIResponse(result.getProbability(), null, result.getModel());
+                                    return new AIResponse(new MLOut(result.getProbability(), new String[]{"unknown"}), null, result.getModel());
                                 }
                                 throw new RuntimeException(result.getErrorCode() + ": " + result.getErrorMessage());
                             });

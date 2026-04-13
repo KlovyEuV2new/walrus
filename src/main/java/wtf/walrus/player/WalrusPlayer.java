@@ -44,7 +44,7 @@ public class WalrusPlayer {
     public boolean wasSprinting, isSprinting, wasSneaking, isSneaking, isFlying, isAllowedFlight, godMode, creativeAbility,
             inventoryOpened, isGliding, isSwimming, wasSwimming, wasGliding, inVehicle, didSendMovementBeforeTickEnd,
             lastPacketWasTeleport, lastPacketWasOnePointSeventeenDuplicate, lastOnGround, onGround;
-    public int heldSlot, xp, openWindowID;
+    public int heldSlot, xp, openWindowID, airTicks;
     public long lastInteract, lastAttack, lastStopSprint, lastStartSprint, lastStopSneaking, lastStartSneaking, firstJoined;
     public Vector3d lastPosition, position;
     public double deltaY, deltaXZ, deltaZ, deltaX, lastDeltaY, lastDeltaXZ, lastDeltaZ, lastDeltaX;

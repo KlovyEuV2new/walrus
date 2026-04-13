@@ -274,7 +274,8 @@ public class MiningCheck {
             }
 
             if (alertManager.shouldAlert(probability)) {
-                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName, CheckType.BLOCK);
+                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
+                        response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.BLOCK);
             }
 
             if (!isOnlyAlert && data.shouldFlag(config.getAiBufferFlag())) {

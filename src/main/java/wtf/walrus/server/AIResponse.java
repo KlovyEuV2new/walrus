@@ -23,27 +23,33 @@
 
 package wtf.walrus.server;
 
+import wtf.walrus.ml.MLOut;
+
 public class AIResponse {
-    private final double probability;
+    private final MLOut output;
     private final String error;
     private final String model;
 
-    public AIResponse(double probability) {
-        this(probability, null, null);
+    public AIResponse(MLOut out) {
+        this(out, null, null);
     }
 
-    public AIResponse(double probability, String error) {
-        this(probability, error, null);
+    public AIResponse(MLOut out, String error) {
+        this(out, error, null);
     }
 
-    public AIResponse(double probability, String error, String model) {
-        this.probability = probability;
+    public AIResponse(MLOut out, String error, String model) {
+        this.output = out;
         this.error = error;
         this.model = model;
     }
 
+    public MLOut getOutput() {
+        return output;
+    }
+
     public double getProbability() {
-        return probability;
+        return output.prob();
     }
 
     public String getError() {
@@ -74,7 +80,7 @@ public class AIResponse {
                         int end = trimmed.indexOf('"', start + 1);
                         if (end != -1) {
                             String errorMsg = trimmed.substring(start + 1, end);
-                            return new AIResponse(0.0, errorMsg);
+                            return new AIResponse(null, errorMsg);
                         }
                     }
                 }
@@ -118,19 +124,19 @@ public class AIResponse {
                 }
             }
 
-            return new AIResponse(probability, null, modelName);
+            return new AIResponse(new MLOut(probability, new String[]{"unknown"}), null, modelName);
         } catch (Exception e) {
             return null;
         }
     }
 
     public String toJson() {
-        return "{\"probability\":" + probability + "}";
+        return "{\"probability\":" + output.prob() + "}";
     }
 
     @Override
     public String toString() {
-        return "AIResponse{probability=" + probability + "}";
+        return "AIResponse{probability=" + output.prob() + "}";
     }
 
     @Override
@@ -140,12 +146,12 @@ public class AIResponse {
         if (obj == null || getClass() != obj.getClass())
             return false;
         AIResponse that = (AIResponse) obj;
-        return Double.compare(that.probability, probability) == 0;
+        return Double.compare(that.output.prob(), output.prob()) == 0;
     }
 
     @Override
     public int hashCode() {
-        long temp = Double.doubleToLongBits(probability);
+        long temp = Double.doubleToLongBits(output.prob());
         return (int) (temp ^ (temp >>> 32));
     }
 }

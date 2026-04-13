@@ -271,6 +271,7 @@ public class AICheck {
 
     private void processResponse(UUID playerUuid, String playerName,
                                  AIPlayerData data, AIResponse response) {
+        if (response == null) return;
         schedulerAdapter.runSync(() -> {
             data.setPendingRequest(false);
             data.clearBuffer();
@@ -302,7 +303,8 @@ public class AICheck {
             }
 
             if (alertManager.shouldAlert(probability)) {
-                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName, CheckType.AIM);
+                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
+                        response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM);
             }
 
             if (!isOnlyAlert && data.shouldFlag(config.getAiBufferFlag())) {

@@ -8,6 +8,7 @@ package wtf.walrus.ml.client;
 import io.reactivex.rxjava3.core.Observable;
 import wtf.walrus.data.TickData;
 import wtf.walrus.ml.FlatBufferDeserializer;
+import wtf.walrus.ml.MLOut;
 import wtf.walrus.ml.Model;
 import wtf.walrus.server.AIResponse;
 import wtf.walrus.server.IAIClient;
@@ -49,17 +50,18 @@ public class LocalAIClient implements IAIClient {
             PlayerState state = playerStates.computeIfAbsent(playerId, k -> new PlayerState());
             state.lastSeen = System.currentTimeMillis();
 
-            double prob   = model.predict(ticks);
+            MLOut out   = model.predict(ticks);
+            double prob = out.prob();
             double thresh = model.getOptimalThreshold();
             Verdict verdict = computeVerdict(prob, thresh);
-            AIResponse response = new AIResponse(prob, verdict.name(), model.getName());
+            AIResponse response = new AIResponse(out, verdict.name(), model.getName());
 
             if (best == null || prob > best.getProbability()) {
                 best = response;
             }
         }
 
-        if (best == null) return new AIResponse(0.0, null, "no_trained_model");
+        if (best == null) return new AIResponse(null, null, "no_trained_model");
         return best;
     }
 
@@ -87,7 +89,7 @@ public class LocalAIClient implements IAIClient {
                 List<TickData> ticks = FlatBufferDeserializer.deserialize(buf);
                 return predictDirect(playerUuid, ticks);
             } catch (Exception e) {
-                return new AIResponse(0.0, null, "local_error");
+                return new AIResponse(null, null, "local_error");
             }
         });
     }

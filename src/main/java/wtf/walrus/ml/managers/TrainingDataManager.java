@@ -32,6 +32,7 @@ public class TrainingDataManager {
 
     public static void putDefaultModel(Main plugin, File pluginDataFolder) {
         File mlsDir = new File(pluginDataFolder, "mls");
+        if (mlsDir.exists()) return;
         mlsDir.mkdirs();
 
         String resourceList;
@@ -50,7 +51,6 @@ public class TrainingDataManager {
             name = name.trim();
             if (name.isEmpty() || !name.endsWith(".bin")) continue;
             File dest = new File(mlsDir, name);
-            if (dest.exists()) continue;
             try (InputStream in = plugin.getClass().getResourceAsStream("/mls/default/" + name)) {
                 if (in == null) {
                     plugin.getLogger().warning("[Walrus] Resource not found: /mls/default/" + name);
