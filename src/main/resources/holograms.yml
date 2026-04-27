@@ -2,13 +2,14 @@
 nametags:
   enabled: true
 
-  # Включайте если у вас проблемы с позицией голограммы.
+  # (versioned-offset) Включайте если у вас проблемы с позицией голограммы.
   #
   # Например:
   #  У вас сервер 1.21, а игрок играет с 1.16.5 (ViaBackwards)
   #  в таком случае бывает что голограмма слишком высоко.
   #
   versioned-offset: false
+  sync-alerts: false
 
   format: "&8{LAST_HISTORY}{NL}&fAVG: {LAST_AVG_COLORED} &f(&#85AEDB{LAST}&f)"
   height_offset: 2.3

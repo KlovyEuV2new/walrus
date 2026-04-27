@@ -49,7 +49,7 @@ public class AIResponse {
     }
 
     public double getProbability() {
-        return output.prob();
+        return output != null ? output.prob() : 0.0;
     }
 
     public String getError() {

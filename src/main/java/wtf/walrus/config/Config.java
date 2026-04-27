@@ -44,6 +44,12 @@ public class Config {
     // ── Local ML mode ─────────────────────────────────────────────────────────
     private final boolean localModeEnabled;
 
+    private final boolean logEnabled;
+    private final int logMaxPlayers;
+    private final List<String> logFormat;
+    private final long logTime;
+    private final String logPermission;
+
     // ── LiteBans ──────────────────────────────────────────────────────────────
     private final boolean liteBansEnabled;
     private final String liteBansDbHost;
@@ -148,6 +154,17 @@ public class Config {
     public static final int DEFAULT_ANALYTICS_COLOR_GREEN_MAX = 10;
     public static final int DEFAULT_ANALYTICS_COLOR_ORANGE_MAX = 20;
 
+    public static final boolean DEFAULT_LOG_ENABLED = true;
+    public static final int DEFAULT_LOG_MAX_PLAYERS = 20;
+    public static final List<String> DEFAULT_LOG_FORMAT = List.of(
+            "&7",
+            " &#5543FF| &fАнти-чит обнаружил нарушителей.",
+            "{players_format_ &#5543FF| &fЗаблокированы: _5_&7 _8_&7%0%&f, &7%1%}",
+            "&7"
+    );
+    public static final long DEFAULT_LOG_TIME = 300000L;
+    public static final String DEFAULT_LOG_PERMISSION = "walrus.view.log";
+
     // ── Default constructor (no-arg / test) ───────────────────────────────────
     public Config() {
         this.debug = DEFAULT_DEBUG;
@@ -207,6 +224,11 @@ public class Config {
         this.aiPlace = true;
         this.aiDig = true;
         this.useItemAi = false;
+        this.logEnabled = DEFAULT_LOG_ENABLED;
+        this.logFormat  = new ArrayList<>(DEFAULT_LOG_FORMAT);
+        this.logTime = DEFAULT_LOG_TIME;
+        this.logPermission = DEFAULT_LOG_PERMISSION;
+        this.logMaxPlayers = DEFAULT_LOG_MAX_PLAYERS;
     }
 
     private static Set<String> createDefaultCheatReasons() {
@@ -379,6 +401,13 @@ public class Config {
         this.analyticsColorOrangeMax = config.getInt("analytics.colors.orange", DEFAULT_ANALYTICS_COLOR_ORANGE_MAX);
         this.aiPlace = config.getBoolean("detection.mining.block-place", true);
         this.aiDig = config.getBoolean("detection.mining.block-dig", true);
+
+        this.logEnabled = config.getBoolean("penalties.log.enabled", DEFAULT_LOG_ENABLED);
+        List<String> rawFormat = config.getStringList("penalties.log.format");
+        this.logFormat = rawFormat.isEmpty() ? new ArrayList<>(DEFAULT_LOG_FORMAT) : rawFormat;
+        this.logTime = config.getLong("penalties.log.time", 300L) * 1000;
+        this.logPermission = config.getString("penalties.log.time", DEFAULT_LOG_PERMISSION);
+        this.logMaxPlayers = config.getInt("penalties.log.max-players", DEFAULT_LOG_MAX_PLAYERS);
     }
 
     private double clampThreshold(double value, String configPath, Logger logger) {
@@ -453,6 +482,9 @@ public class Config {
         return 5000;
     }
 
+    public boolean isLogEnabled()      { return logEnabled; }
+    public List<String> getLogFormat() { return logFormat;  }
+
     public boolean isVlDecayEnabled() { return vlDecayEnabled; }
     public int getVlDecayIntervalSeconds() { return vlDecayIntervalSeconds; }
     public int getVlDecayAmount() { return vlDecayAmount; }
@@ -519,5 +551,17 @@ public class Config {
 
     public boolean isUseItemAi() {
         return useItemAi;
+    }
+
+    public long getLogTime() {
+        return logTime;
+    }
+
+    public String getLogPermission() {
+        return logPermission;
+    }
+
+    public int getLogMaxPlayers() {
+        return logMaxPlayers;
     }
 }

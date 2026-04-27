@@ -1,7 +1,7 @@
 package wtf.walrus.ml.client;
 
 import wtf.walrus.ml.Model;
-import wtf.walrus.ml.impl.LocalModel;
+import wtf.walrus.ml.impl.MLPModel;
 import wtf.walrus.ml.managers.TrainingDataManager;
 
 import java.io.File;
@@ -33,7 +33,7 @@ public class LocalAIClientProvider {
 
     public void initialize() {
         if (this.client != null) return;
-        Model localModel = new LocalModel(logger);
+        Model localModel = new MLPModel(logger);
         this.models = Arrays.asList(localModel);
 
         for (Model m : models) {

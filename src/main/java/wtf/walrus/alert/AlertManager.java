@@ -31,7 +31,7 @@ import wtf.walrus.checks.CheckType;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.MessagesConfig;
 import wtf.walrus.hologram.NametagManager;
-import wtf.walrus.ml.impl.LocalModel;
+import wtf.walrus.ml.impl.MLPModel;
 import wtf.walrus.scheduler.SchedulerAdapter;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.util.ColorUtil;
@@ -147,6 +147,10 @@ public class AlertManager {
         });
     }
 
+    public String getTypeName(CheckType type) {
+        return Main.instance.getCheckTypeManager().getName(type);
+    }
+
     private String formatDefaultAlertMessage(String suspectName, int vl, double buffer, String checkName, String verbose) {
         String template = messagesConfig.getMessage("default-alert-format", suspectName, vl, buffer);
         String checkDisplay = checkName != null ? checkName : "unknown";
@@ -159,7 +163,7 @@ public class AlertManager {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format", suspectName, probability, pc, buffer, 0);
         String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
-        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        String checkTypeDisplay = checkType != null ? getTypeName(checkType) : getTypeName(CheckType.UNKNOWN);
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
         return getPrefix() + ColorUtil.colorize(template);
@@ -169,10 +173,10 @@ public class AlertManager {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format", suspectName, probability, pc, buffer, 0);
         String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
-        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        String checkTypeDisplay = checkType != null ? getTypeName(checkType) : getTypeName(CheckType.UNKNOWN);
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
-        int IN = LocalModel.IN;
+        int IN = MLPModel.IN;
         for (int i = 0; i < IN; i++) {
             String value = (i < bestNames.length) ? bestNames[i] : "unknown";
             template = template.replace("{BEST_" + i + "}", value)
@@ -185,7 +189,7 @@ public class AlertManager {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format-vl", suspectName, probability, pc, buffer, vl);
         String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
-        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        String checkTypeDisplay = checkType != null ? getTypeName(checkType) : getTypeName(CheckType.UNKNOWN);
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
         return getPrefix() + ColorUtil.colorize(template);
@@ -195,16 +199,20 @@ public class AlertManager {
         String pc = NametagManager.getColorInfo(probability);
         String template = messagesConfig.getMessage("alert-format-vl", suspectName, probability, pc, buffer, vl);
         String modelDisplay = modelName != null ? config.getModelDisplayName(modelName) : "Unknown";
-        String checkTypeDisplay = checkType != null ? checkType.name() : CheckType.UNKNOWN.name();
+        String checkTypeDisplay = checkType != null ? getTypeName(checkType) : getTypeName(CheckType.UNKNOWN);
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
-        int IN = LocalModel.IN;
+        int IN = MLPModel.IN;
         for (int i = 0; i < IN; i++) {
             String value = (i < bestNames.length) ? bestNames[i] : "unknown";
             template = template.replace("{BEST_" + i + "}", value)
                     .replace("<best_" + i + ">", value);
         }
         return getPrefix() + ColorUtil.colorize(template);
+    }
+
+    public boolean hasEnabledAlerts(UUID uuid) {
+        return playersWithAlerts.contains(uuid);
     }
 
     public void handlePlayerQuit(Player player) {

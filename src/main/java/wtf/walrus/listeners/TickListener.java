@@ -1,13 +1,16 @@
 package wtf.walrus.listeners;
 
+import wtf.walrus.Main;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.compat.EventCompat;
+import wtf.walrus.config.Config;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.session.ISessionManager;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import wtf.walrus.violation.ViolationManager;
 
 import java.util.Map;
 import java.util.UUID;
@@ -53,6 +56,9 @@ public class TickListener {
     }
 
     private void onTick() {
+        ViolationManager violationManager = Main.instance.getViolationManager();
+        Config config = Main.instance.getPluginConfig();
+        if (System.currentTimeMillis() - violationManager.actionCycle >= config.getLogTime()) violationManager.clearActions();
         int currentTick = tickHandler.getCurrentTick();
         if (hitListener != null) {
             hitListener.setCurrentTick(currentTick);

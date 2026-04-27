@@ -103,8 +103,13 @@ detection:
       only-alert: true    # Test model - testing mode - no punishments
     # local model display name (used when local-mode: true)
     local:
-      name: "Local"
+      name: "Local" # MLP
       only-alert: false
+  types:
+    aim:
+      name: "Aim"
+    block:
+      name: "Block"
 
 # ┌───────────────────────────────────────────────────────────────────────────────┐
 # │                              ALERT SETTINGS                                   │
@@ -180,6 +185,18 @@ penalties:
   # Minimum probability required for penalty execution
   # Do not change unless you know what you are doing
   min-probability: 0.01 # 0.01
+
+  log:
+    enabled: true
+    max-players: 20
+    permission: "walrus.log.view"
+    time: 300 # sec
+    format:
+      - "&7"
+      - " &#5543FF| &fАнти-чит обнаружил нарушителей."
+      - "{players_format_ &#5543FF| &fЗаблокированы: _5_&7 _8_&7%0%&f, &7%1%}"
+      - "&7"
+
 
   # Ban animation settings
   # Epic animation: levitation + purple/pink particles + lightning strike

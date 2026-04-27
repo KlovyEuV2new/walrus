@@ -7,7 +7,7 @@ import wtf.walrus.ml.Model;
 import java.io.*;
 import java.util.*;
 
-public class LocalModel extends Model {
+public class MLPModel extends Model {
 
     public static final int version = 44;
 
@@ -16,7 +16,7 @@ public class LocalModel extends Model {
     static {
         TickData dummy = new TickData(0,0,0,0,0,0,0,0);
         List<TickData> probe = List.of(dummy, dummy);
-        IN = new LocalModel(null).extractFeaturesInternal(probe).size();
+        IN = new MLPModel(null).extractFeaturesInternal(probe).size();
     }
 
     private final int BATCH_SIZE = 32;
@@ -56,7 +56,7 @@ public class LocalModel extends Model {
     private final java.util.logging.Logger logger;
     private static final Random rnd = new Random();
 
-    public LocalModel(java.util.logging.Logger logger) {
+    public MLPModel(java.util.logging.Logger logger) {
         super("local");
         this.logger = logger;
     }

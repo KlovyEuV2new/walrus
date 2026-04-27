@@ -21,6 +21,8 @@ public class BadPacketsA extends Check implements PacketCheck {
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
+       // if (player.onGround && isPositionUpdate(event.getPacketType())) player.user.sendMessage(String.valueOf(player.deltaY));
+
         if (player.inVehicle) {
             sprint = sneak = false;
             return;

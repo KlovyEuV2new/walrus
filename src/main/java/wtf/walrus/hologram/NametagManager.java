@@ -160,7 +160,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         List<Player> admins = new ArrayList<>();
 
         for (Player p : allPlayers) {
-            if (hasViewPermission(p)) {
+            if (hasViewPermission(p) && (Main.instance.getAlertManager().hasEnabledAlerts(p.getUniqueId()) || !Main.instance.getHologramConfig().holoSyncAlerts())) {
                 admins.add(p);
             }
         }
@@ -275,13 +275,13 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
         String filled = format
                 .replace("{LAST}", lastType.name())
-                .replace("{AVG}", String.format("%.4f", avgProb))
-                .replace("{MINE_AVG}", String.format("%.4f", mineAvgProb))
+                .replace("{AVG}", FastMath.format(avgProb, 4))
+                .replace("{MINE_AVG}", FastMath.format(mineAvgProb, 4))
                 .replace("{MINE_AVG_COLORED}", getColorInfo(mineAvgProb))
                 .replace("{MINE_HISTORY}", mineHistoryStr)
                 .replace("{AVG_COLORED}", getColorInfo(avgProb))
                 .replace("{HISTORY}", historyStr)
-                .replace("{LAST_AVG}", String.format("%.4f", lastAvg))
+                .replace("{LAST_AVG}", FastMath.format(lastAvg, 4))
                 .replace("{LAST_AVG_COLORED}", getColorInfo(lastAvg))
                 .replace("{LAST_HISTORY}", lastHistStr);
 
@@ -326,7 +326,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 Player viewer = Bukkit.getPlayer(viewerId);
                 if (viewer == null) {
                     currentViewers.remove(viewerId);
-                } else if (!hasViewPermission(viewer)) {
+                } else if (!hasViewPermission(viewer) || (!Main.instance.getAlertManager().hasEnabledAlerts(viewerId) && Main.instance.getHologramConfig().holoSyncAlerts())) {
                     removeViewer(target.getUniqueId(), viewer);
                 }
             }

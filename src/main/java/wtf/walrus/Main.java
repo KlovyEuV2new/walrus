@@ -14,6 +14,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import wtf.walrus.alert.AlertManager;
 import wtf.walrus.checks.Check;
+import wtf.walrus.checks.CheckTypeManager;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.checks.listener.CheckManagerListener;
@@ -83,6 +84,8 @@ public final class Main extends JavaPlugin {
     private PunishmentsConfig punishmentsConfig;
     private PunishmentManager punishmentManager;
 
+    private CheckTypeManager checkTypeManager;
+
     private PunishListener bListener;
 
     @Override
@@ -135,6 +138,7 @@ public final class Main extends JavaPlugin {
         this.messagesConfig.load();
         this.hologramConfig = new HologramConfig(this);
         this.hologramConfig.load();
+        this.checkTypeManager = new CheckTypeManager(getConfig());
 
         File mlsDataDir = new File(getDataFolder(), "mls/data");
         if (!mlsDataDir.exists()) {
@@ -287,6 +291,7 @@ public final class Main extends JavaPlugin {
                 if (menuConfig != null) menuConfig.reload();
                 if (messagesConfig != null) messagesConfig.reload();
                 if (hologramConfig != null) hologramConfig.reload();
+                if (checkTypeManager != null) checkTypeManager.loadTypes(getConfig());
 
                 if (punishmentsConfig != null) {
                     punishmentsConfig.reload();
@@ -387,5 +392,9 @@ public final class Main extends JavaPlugin {
 
     public VerdictManager getVerdictManager() {
         return verdictManager;
+    }
+
+    public CheckTypeManager getCheckTypeManager() {
+        return checkTypeManager;
     }
 }

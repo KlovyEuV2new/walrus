@@ -43,6 +43,7 @@ public class HologramConfig {
     private String colorCriticalBold;
 
     private boolean versionedOffset;
+    private boolean holoSyncAlerts;
 
     public HologramConfig(JavaPlugin plugin) {
         this.plugin     = plugin;
@@ -63,6 +64,7 @@ public class HologramConfig {
         this.colorCritical    = DEFAULT_COLOR_CRITICAL;
         this.colorCriticalBold = DEFAULT_COLOR_CRITICAL_BOLD;
         this.versionedOffset = false;
+        this.holoSyncAlerts = false;
     }
 
     private void loadValues() {
@@ -79,6 +81,7 @@ public class HologramConfig {
         this.colorCriticalBold = config.getString("nametags.colors.critical_bold", DEFAULT_COLOR_CRITICAL_BOLD);
 
         this.versionedOffset = config.getBoolean("nametags.versioned-offset", false);
+        this.holoSyncAlerts = config.getBoolean("nametags.sync-alerts", false);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -127,5 +130,8 @@ public class HologramConfig {
 
     public boolean isVersionedOffset() {
         return versionedOffset;
+    }
+    public boolean holoSyncAlerts() {
+        return holoSyncAlerts;
     }
 }

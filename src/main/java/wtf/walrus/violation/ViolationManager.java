@@ -23,9 +23,11 @@
 
 package wtf.walrus.violation;
 
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import wtf.walrus.Main;
 import wtf.walrus.alert.AlertManager;
+import wtf.walrus.alert.FlagAction;
 import wtf.walrus.checks.CheckType;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
@@ -39,6 +41,8 @@ import wtf.walrus.penalty.PenaltyContext;
 import wtf.walrus.penalty.PenaltyExecutor;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
+import wtf.walrus.util.ColorUtil;
+import wtf.walrus.util.PlayerListFormatter;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -50,6 +54,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.logging.Logger;
 
 public class ViolationManager {
@@ -69,6 +74,13 @@ public class ViolationManager {
     private AICheck aiCheck;
     private MiningCheck miningCheck;
     private ScheduledTask decayTask;
+
+    public Set<FlagAction> actions = new CopyOnWriteArraySet<>();
+    public long actionCycle = 0L;
+
+    public MiningCheck getMiningCheck() {
+        return miningCheck;
+    }
 
     public static class KickRecord {
         private final String playerName;
@@ -209,6 +221,39 @@ public class ViolationManager {
                 lastPunishmentTime.put(uuid, now);
             }
             executeCommand(command, player, probability, buffer, newVl);
+
+            if (actionType.isPunishment()) {
+                if (actionCycle == 0L) actionCycle = System.currentTimeMillis();
+                FlagAction action = new FlagAction(player.getName(), uuid, probability);
+                actions.add(action);
+                if (actions.size() >= config.getLogMaxPlayers()) clearActions();
+            }
+
+        }
+    }
+
+    public void clearActions() {
+        executeActionsLog();
+        actions.clear();
+        actionCycle = System.currentTimeMillis();
+    }
+
+    public void executeActionsLog() {
+        if (actions.isEmpty()) return;
+        if (!config.isLogEnabled()) return;
+
+        List<String> playerNames = new ArrayList<>();
+        for (FlagAction action : actions) {
+            playerNames.add(action.name());
+        }
+        List<String> resolvedLines = PlayerListFormatter.resolve(config.getLogFormat(), playerNames);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if ((!config.getLogPermission().isEmpty() && !player.hasPermission(config.getLogPermission()))
+                    || !alertManager.hasAlertsEnabled(player)) continue;
+            for (String line : resolvedLines) {
+                player.sendMessage(ColorUtil.colorize(line));
+            }
         }
     }
 

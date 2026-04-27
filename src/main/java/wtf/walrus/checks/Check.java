@@ -206,6 +206,8 @@ public class Check {
         vl = 0;
     }
 
+
+
     public boolean flagAndAlert(String verbose) {
         return flag() && alert(verbose);
     }
