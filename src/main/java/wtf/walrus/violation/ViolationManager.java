@@ -225,11 +225,16 @@ public class ViolationManager {
             if (actionType.isPunishment()) {
                 if (actionCycle == 0L) actionCycle = System.currentTimeMillis();
                 FlagAction action = new FlagAction(player.getName(), uuid, probability);
-                actions.add(action);
+                if (!hasAction(player)) actions.add(action);
                 if (actions.size() >= config.getLogMaxPlayers()) clearActions();
             }
 
         }
+    }
+
+    public boolean hasAction(Player player) {
+        for (FlagAction action : actions) if (action.name().equals(player.getName())) return true;
+        return false;
     }
 
     public void clearActions() {
@@ -249,8 +254,8 @@ public class ViolationManager {
         List<String> resolvedLines = PlayerListFormatter.resolve(config.getLogFormat(), playerNames);
 
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if ((!config.getLogPermission().isEmpty() && !player.hasPermission(config.getLogPermission()))
-                    || !alertManager.hasAlertsEnabled(player)) continue;
+            if (!config.getLogPermission().isEmpty() && (!player.hasPermission(config.getLogPermission())
+                    || !alertManager.hasAlertsEnabled(player))) continue;
             for (String line : resolvedLines) {
                 player.sendMessage(ColorUtil.colorize(line));
             }

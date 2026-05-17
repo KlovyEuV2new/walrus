@@ -5,12 +5,6 @@ import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.google.common.collect.ClassToInstanceMap;
 import com.google.common.collect.MutableClassToInstanceMap;
 import wtf.walrus.checks.Check;
-import wtf.walrus.checks.impl.aim.AimA;
-import wtf.walrus.checks.impl.aim.AimB;
-import wtf.walrus.checks.impl.aim.snap.AimSnapLook;
-import wtf.walrus.checks.impl.aim.states.AimStaticA;
-import wtf.walrus.checks.impl.aim.states.AimStaticB;
-import wtf.walrus.checks.impl.badpackets.BadPacketsA;
 import wtf.walrus.player.WalrusPlayer;
 
 import java.util.List;

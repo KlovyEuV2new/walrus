@@ -45,7 +45,7 @@ detection:
   # └─────────────────────────────────────────────────────────────────────────────┘
   local-mode: true
   mining:
-    enabled: true
+    enabled: false
     block-place: true
     block-dig: true
   use-item: false

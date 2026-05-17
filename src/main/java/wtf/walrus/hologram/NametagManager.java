@@ -49,6 +49,7 @@ import wtf.walrus.util.FastMath;
 public class NametagManager extends PacketListenerAbstract implements Listener {
 
     private static final double LINE_GAP = 0.25;
+    private static long PERM_CACHE_TTL = 2000L;
 
     private final JavaPlugin plugin;
     private final AICheck aiCheck;
@@ -57,6 +58,8 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     private final Map<UUID, int[]> armorStandIds = new ConcurrentHashMap<>();
     private final Map<UUID, String> lastSentText = new ConcurrentHashMap<>();
     private final Map<UUID, Set<UUID>> viewersMap = new ConcurrentHashMap<>();
+
+    private final Map<UUID, long[]> permCache = new ConcurrentHashMap<>();
 
     private ScheduledTask task;
     private int cleanupCounter = 0;
@@ -72,6 +75,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
         if (!config.getBoolean("nametags.enabled", true))
             return;
+        reload((Main) plugin);
 
         PacketEvents.getAPI().getEventManager().registerListener(this);
         Bukkit.getPluginManager().registerEvents(this, plugin);
@@ -92,11 +96,27 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         armorStandIds.clear();
         lastSentText.clear();
         viewersMap.clear();
+        permCache.clear();
     }
 
     private boolean hasViewPermission(Player player) {
-        return player.hasPermission(Permissions.ADMIN)
+        UUID uuid = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        long[] cached = permCache.get(uuid);
+
+        if (cached != null && now - cached[1] < PERM_CACHE_TTL) {
+            return cached[0] == 1L;
+        }
+
+        boolean result = player.hasPermission(Permissions.ADMIN)
                 || player.hasPermission(Permissions.ALERTS);
+
+        permCache.put(uuid, new long[]{result ? 1L : 0L, now});
+        return result;
+    }
+
+    public void invalidatePermCache(UUID uuid) {
+        permCache.remove(uuid);
     }
 
     private double getVersionedOffset(Player viewer, double baseOffset) {
@@ -184,6 +204,8 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     private void cleanupOfflineViewers() {
         armorStandIds.keySet().removeIf(uuid -> Bukkit.getPlayer(uuid) == null);
+        permCache.keySet().removeIf(uuid -> Bukkit.getPlayer(uuid) == null);
+
         for (Map.Entry<UUID, Set<UUID>> entry : viewersMap.entrySet()) {
             entry.getValue().removeIf(uuid -> {
                 Player p = Bukkit.getPlayer(uuid);
@@ -221,23 +243,8 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         List<Double> history = data.getFormatedProbabilityHistory();
         List<Double> mineHistory = miningData.getFormatedProbabilityHistory();
 
-        String historyStr = "-";
-        if (!history.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (Double val : history) {
-                sb.append(getColorInfo(val)).append(" ");
-            }
-            historyStr = sb.toString().trim();
-        }
-
-        String mineHistoryStr = "-";
-        if (!mineHistory.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (Double val : mineHistory) {
-                sb.append(getColorInfo(val)).append(" ");
-            }
-            mineHistoryStr = sb.toString().trim();
-        }
+        String historyStr = buildHistoryStr(history);
+        String mineHistoryStr = buildHistoryStr(mineHistory);
 
         VerdictManager verdictManager = Main.instance.getVerdictManager();
 
@@ -248,33 +255,26 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         boolean invalidLast = false;
         List<Double> lastHistory = new ArrayList<>();
         String lastHistStr = "-";
-        double lastAvg = 0;
+        double lastAvg = 0, lastFullAvg = 0;
+        int lastPercent = 0;
         if (lastClass instanceof AICheck) {
             lastAvg = data.getFormatedAverageProbability();
+            lastFullAvg = data.getAverageProbability();
+            lastPercent = (int) (lastFullAvg * 100);
             lastHistory = data.getFormatedProbabilityHistory();
-
-            if (!history.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                for (Double val : history) {
-                    sb.append(getColorInfo(val)).append(" ");
-                }
-                lastHistStr = sb.toString().trim();
-            }
+            lastHistStr = buildHistoryStr(history);
         } else if (lastClass instanceof MiningCheck) {
             lastAvg = miningData.getFormatedAverageProbability();
+            lastFullAvg = miningData.getAverageProbability();
+            lastPercent = (int) (lastFullAvg * 100);
             lastHistory = miningData.getFormatedProbabilityHistory();
-
-            if (!mineHistory.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                for (Double val : mineHistory) {
-                    sb.append(getColorInfo(val)).append(" ");
-                }
-                lastHistStr = sb.toString().trim();
-            }
-        } else invalidLast = true;
+            lastHistStr = buildHistoryStr(mineHistory);
+        } else {
+            invalidLast = true;
+        }
 
         String filled = format
-                .replace("{LAST}", lastType.name())
+                .replace("{LAST}", Main.instance.getCheckTypeManager().getName(lastType))
                 .replace("{AVG}", FastMath.format(avgProb, 4))
                 .replace("{MINE_AVG}", FastMath.format(mineAvgProb, 4))
                 .replace("{MINE_AVG_COLORED}", getColorInfo(mineAvgProb))
@@ -283,6 +283,10 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 .replace("{HISTORY}", historyStr)
                 .replace("{LAST_AVG}", FastMath.format(lastAvg, 4))
                 .replace("{LAST_AVG_COLORED}", getColorInfo(lastAvg))
+                .replace("{LAST_FULL_PERCENT}", String.valueOf(lastPercent))
+                .replace("{LAST_PERCENT_FULL_COLOR}", getInfoColor(lastFullAvg))
+                .replace("{LAST_PERCENT}", String.valueOf((int) (lastAvg * 100)))
+                .replace("{LAST_PERCENT_COLOR}", getInfoColor(lastAvg))
                 .replace("{LAST_HISTORY}", lastHistStr);
 
         String[] lines = filled.split("\\{NL\\}", -1);
@@ -337,6 +341,16 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         }
     }
 
+    private String buildHistoryStr(List<Double> history) {
+        if (history.isEmpty()) return "-";
+        StringBuilder sb = new StringBuilder();
+        for (Double val : history) {
+            sb.append(getColorInfo(val)).append(" ");
+        }
+        if (sb.length() > 0) sb.setLength(sb.length() - 1);
+        return sb.toString();
+    }
+
     public void updateFor(Player target, Player viewer, int[] entityIds, String[] lines,
                           Location baseLoc, double baseOffset, boolean textChanged) {
         Set<UUID> viewers = viewersMap.computeIfAbsent(target.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
@@ -372,6 +386,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
+        invalidatePermCache(event.getPlayer().getUniqueId());
         for (UUID targetId : new HashSet<>(viewersMap.keySet())) {
             removeViewer(targetId, event.getPlayer());
         }
@@ -389,6 +404,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     }
 
     public void handlePlayerQuit(Player player) {
+        invalidatePermCache(player.getUniqueId());
         despawnForAll(player.getUniqueId());
 
         for (UUID targetId : new HashSet<>(viewersMap.keySet())) {
@@ -489,6 +505,20 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         return metadata;
     }
 
+    public void reload(Main plugin) {
+        FileConfiguration holoConfig = plugin.getHologramConfig().getConfig();
+        PERM_CACHE_TTL = holoConfig.getInt("ttl-update", 40) * 50L;
+    }
+
+    public static String getInfoColor(double val) {
+        HologramConfig holo = Main.instance.getHologramConfig();
+        if (val < 0.5) return holo.getColorLow();
+        if (val < 0.6) return holo.getColorMedium();
+        if (val < 0.8) return holo.getColorHigh();
+        if (val < 0.9) return holo.getColorCritical();
+        return             holo.getColorCriticalBold();
+    }
+
     public static String getColorInfo(double val) {
         HologramConfig holo = Main.instance.getHologramConfig();
         String fmt = FastMath.format(val, 4);
@@ -502,6 +532,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     public static String getColorInfoFull(double val) {
         HologramConfig holo = Main.instance.getHologramConfig();
         String fmt = FastMath.format(val, 4);
+        if (val < 0.0001) return holo.getColorLow()       + val;
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;

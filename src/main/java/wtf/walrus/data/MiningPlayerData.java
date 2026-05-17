@@ -25,6 +25,9 @@ public class MiningPlayerData {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private DamageVerdict damageVerdict;
 
+    private final Deque<Double> q;
+    private double sum = 0.0;
+
     public int getLastEndTick() { return lastEndTick; }
 
     public MiningPlayerData(UUID playerId) {
@@ -37,6 +40,7 @@ public class MiningPlayerData {
         this.aimProcessor = new AimProcessor();
         this.tickBuffer = new ArrayDeque<>(sequence);
         this.probabilityHistory = new ArrayDeque<>(10);
+        this.q = new ArrayDeque<>(5);
         this.ticksSinceAttack = sequence + 1;
         this.ticksStep = 0;
         this.buffer = 0.0;
@@ -131,11 +135,33 @@ public class MiningPlayerData {
         }
     }
 
+    public void add(double v) {
+        lock.writeLock().lock();
+        try {
+            if (q.size() == 5) {
+                sum -= q.removeFirst();
+            }
+            q.addLast(v);
+            sum += v;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void addInternal(double v) {
+        if (q.size() == 5) {
+            sum -= q.removeFirst();
+        }
+        q.addLast(v);
+        sum += v;
+    }
+
     public void fullReset() {
         lock.writeLock().lock();
         try {
             tickBuffer.clear();
             probabilityHistory.clear();
+            q.clear();
             aimProcessor.reset();
             pendingRequest = false;
             ticksSinceAttack = sequence + 1;
@@ -289,18 +315,6 @@ public class MiningPlayerData {
         }
     }
 
-    public double getFormatedAverageProbability() {
-        lock.readLock().lock();
-        try {
-            List<Double> all = new ArrayList<>(probabilityHistory);
-            int size = all.size();
-            List<Double> last5 = size <= 5 ? all : all.subList(size - 5, size);
-            return last5.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
     public void updateBuffer(double probability, double multiplier, double decreaseAmount, double threshold) {
         lock.writeLock().lock();
         try {
@@ -309,6 +323,7 @@ public class MiningPlayerData {
                 probabilityHistory.pollFirst();
             }
             probabilityHistory.addLast(probability);
+            addInternal(probability);
             if (probability > 0.8) {
                 highProbabilityDetections++;
             }
@@ -335,6 +350,16 @@ public class MiningPlayerData {
             lock.writeLock().unlock();
         }
     }
+
+    public double getFormatedAverageProbability() {
+        lock.readLock().lock();
+        try {
+            return q.isEmpty() ? 0.0 : sum / q.size();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
 
     public int getHighProbabilityDetections() {
         return highProbabilityDetections;
