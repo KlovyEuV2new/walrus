@@ -25,6 +25,8 @@ public class MiningPlayerData {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private DamageVerdict damageVerdict;
 
+    public final List<TickData> ticksLog;
+
     private final Deque<Double> q;
     private double sum = 0.0;
 
@@ -41,6 +43,7 @@ public class MiningPlayerData {
         this.tickBuffer = new ArrayDeque<>(sequence);
         this.probabilityHistory = new ArrayDeque<>(10);
         this.q = new ArrayDeque<>(5);
+        this.ticksLog = new ArrayList<>();
         this.ticksSinceAttack = sequence + 1;
         this.ticksStep = 0;
         this.buffer = 0.0;
@@ -48,6 +51,19 @@ public class MiningPlayerData {
         this.pendingRequest = false;
         this.isBedrock = false;
         this.highProbabilityDetections = 0;
+    }
+
+    public void addLog(TickData tick) {
+        if (ticksLog.size() >= 600) {
+            ticksLog.remove(0);
+        }
+        ticksLog.add(tick);
+    }
+
+    public void addLog(List<TickData> newTicks) {
+        for (TickData tick : newTicks) {
+            addLog(tick);
+        }
     }
 
     public long getLastAttackTime() {

@@ -24,6 +24,8 @@
 
 package wtf.walrus.penalty;
 import org.bukkit.plugin.java.JavaPlugin;
+import wtf.walrus.Main;
+import wtf.walrus.config.Label;
 import wtf.walrus.penalty.handlers.AlertHandler;
 import wtf.walrus.penalty.handlers.BanHandler;
 import wtf.walrus.penalty.handlers.KickHandler;

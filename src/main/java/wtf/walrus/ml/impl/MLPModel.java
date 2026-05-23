@@ -469,6 +469,56 @@ public class MLPModel extends Model {
         }
     }
 
+    @Override
+    public MLOut compare(List<TickData> a, List<TickData> b) {
+        if (a == null || a.isEmpty() || b == null || b.isEmpty())
+            return new MLOut(0.0, new String[]{"unknown"});
+
+        NamedFeatureBuilder builderA = extractFeaturesInternal(a);
+        NamedFeatureBuilder builderB = extractFeaturesInternal(b);
+        if (builderA == null || builderB == null)
+            return new MLOut(0.0, new String[]{"unknown"});
+
+        double[] fA     = normalise(builderA.toArray());
+        double[] fB     = normalise(builderB.toArray());
+        String[] fNames = builderA.names();
+
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < IN; i++) {
+            dot   += fA[i] * fB[i];
+            normA += fA[i] * fA[i];
+            normB += fB[i] * fB[i];
+        }
+        double cosineSim = (normA < 1e-10 || normB < 1e-10)
+                ? 0.0
+                : dot / (Math.sqrt(normA) * Math.sqrt(normB));
+        cosineSim = Math.max(0.0, cosineSim);
+
+        double euclidDist = 0;
+        for (int i = 0; i < IN; i++) {
+            double d = fA[i] - fB[i];
+            euclidDist += d * d;
+        }
+        euclidDist = Math.sqrt(euclidDist);
+        double normEuclid     = euclidDist / Math.sqrt(IN);
+        double euclidSimilarity = 1.0 / (1.0 + normEuclid);
+
+        double score = 0.5 * cosineSim + 0.5 * euclidSimilarity;
+
+        double[] absDiff = new double[IN];
+        for (int i = 0; i < IN; i++) absDiff[i] = Math.abs(fA[i] - fB[i]);
+
+        Integer[] indices = new Integer[IN];
+        for (int i = 0; i < IN; i++) indices[i] = i;
+        Arrays.sort(indices, (x, y) -> Double.compare(absDiff[y], absDiff[x]));
+
+        String[] bestNames = new String[IN];
+        for (int i = 0; i < IN; i++)
+            bestNames[i] = fNames[indices[i]].toLowerCase();
+
+        return new MLOut(score, bestNames);
+    }
+
     private void resetAdam() {
         adamStep = 0; mBOut = 0.0; vBOut = 0.0;
         for (int i = 0; i < IN; i++)  Arrays.fill(mW1[i], 0.0);

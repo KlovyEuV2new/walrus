@@ -1,0 +1,6 @@
+enabled: false
+
+bans:
+  #<uuid>:
+  #  time: 0
+  #  record: "1.csv"

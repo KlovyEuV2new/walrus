@@ -33,6 +33,7 @@ import wtf.walrus.config.Config;
 import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.data.TickData;
 import wtf.walrus.ml.client.LocalAIClient;
+import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.scheduler.SchedulerAdapter;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIClientProvider;
@@ -224,6 +225,10 @@ public class MiningCheck {
                         " verdict=" + response.getModel());
 
                 processResponse(playerUuid, playerName, data, response);
+                data.addLog(ticks);
+
+                WalrusPlayer wp = WalrusPlayer.get(player.getUniqueId());
+                if (wp != null) wp.ctt(ticks);
 
             } else {
                 byte[] serialized = FlatBufferSerializer.serialize(ticks);

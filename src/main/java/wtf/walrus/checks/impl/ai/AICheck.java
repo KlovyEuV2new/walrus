@@ -34,6 +34,7 @@ import wtf.walrus.config.Config;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.TickData;
 import wtf.walrus.ml.client.LocalAIClient;
+import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.scheduler.SchedulerAdapter;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIClientProvider;
@@ -252,6 +253,10 @@ public class AICheck {
                         " verdict=" + response.getModel());
 
                 processResponse(playerUuid, playerName, data, response);
+                data.addLog(ticks);
+
+                WalrusPlayer wp = WalrusPlayer.get(player.getUniqueId());
+                if (wp != null) wp.ctt(ticks);
 
             } else {
                 byte[] serialized = FlatBufferSerializer.serialize(ticks);

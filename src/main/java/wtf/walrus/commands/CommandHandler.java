@@ -7,6 +7,8 @@
 
 package wtf.walrus.commands;
 
+import com.github.retrooper.packetevents.protocol.player.User;
+import com.github.retrooper.packetevents.protocol.world.Location;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -22,12 +24,12 @@ import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.Label;
-import wtf.walrus.data.AIPlayerData;
-import wtf.walrus.data.DataSession;
-import wtf.walrus.data.DataType;
-import wtf.walrus.data.MiningPlayerData;
+import wtf.walrus.data.*;
 import wtf.walrus.hologram.NametagManager;
 import wtf.walrus.ml.client.LocalAIClientProvider;
+import wtf.walrus.npc.NPC;
+import wtf.walrus.player.WalrusPlayer;
+import wtf.walrus.rotationloader.RotationSession;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.session.ISessionManager;
@@ -36,12 +38,14 @@ import wtf.walrus.util.DatasetUploader;
 import wtf.walrus.violation.ViolationManager;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import com.github.retrooper.packetevents.PacketEvents;
@@ -103,12 +107,97 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             case "train":        return handleTrain(sender, args);
             case "localstatus":  return handleLocalStatus(sender);
             case "upload":       return handleUpload(sender);
+            case "play":         return handlePlayRot(sender, args);
+            case "stopplay":     return handleStopPlayRot(sender, args);
+            case "target":       return handleSettt(sender, args);
+            case "testbot":      return handleTestBot(sender);
+            case "removebot":    return handleOffBot(sender);
+            case "reloadset":    {
+                if (!sender.hasPermission(Permissions.PLAY_ROTATION) && !sender.hasPermission(Permissions.ADMIN)) {
+                    sender.sendMessage(getPrefix() + msg("no-permission"));
+                    return true;
+                }
+
+                Main.instance.getBansManager().reloadDataset();
+                return true;
+            }
             default:
                 sender.sendMessage(getPrefix() + msg("unknown-command", "{ARGS}", args[0]));
                 sendUsage(sender);
                 return true;
         }
     }
+
+    private boolean handlePlayRot(CommandSender sender, String[] args) {
+        boolean crits = Arrays.stream(args)
+                .anyMatch(arg -> arg.equalsIgnoreCase("-c"));
+
+        String file = args[1];
+        if (!sender.hasPermission(Permissions.PLAY_ROTATION) && !sender.hasPermission(Permissions.ADMIN)) {
+            sender.sendMessage(getPrefix() + msg("no-permission"));
+            return true;
+        }
+        if (file == null || file.isEmpty()) {
+            sendUsage(sender);
+            return true;
+        }
+
+        User user = null;
+        try {
+            if (!(sender instanceof Player bukkitPlayer)) {
+                sender.sendMessage(ColorUtil.colorize("&cOnly players can use this command."));
+                return true;
+            }
+
+            user = PacketEvents.getAPI()
+                    .getPlayerManager()
+                    .getUser(bukkitPlayer);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        if (user == null) return false;
+
+        WalrusPlayer player = WalrusPlayer.get(user.getUUID());
+        if (player == null) return false;
+
+        List<TickData> ticks = new ArrayList<>();
+        try {
+            ticks = Main.instance.getBansManager().loadAndClose(Main.instance, null, file);
+        } catch (IOException ignored) {}
+
+        if (ticks != null && !ticks.isEmpty()) {
+            RotationSession session = new RotationSession(user.getName(), file, user.getUUID(), ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), ticks, crits);
+            Location location = new Location(player.position.x, player.position.y, player.position.z, player.yaw, player.pitch);
+            session.load(user, location);
+            return true;
+        }
+        return true;
+    }
+
+    private boolean handleStopPlayRot(CommandSender sender, String[] args) {
+        User user = null;
+        try {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage(ColorUtil.colorize("&cOnly players can use this command."));
+                return true;
+            }
+
+            Player bukkitPlayer = (Player) sender;
+            user = PacketEvents.getAPI()
+                    .getPlayerManager()
+                    .getUser(bukkitPlayer);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        WalrusPlayer player = WalrusPlayer.get(user.getUUID());
+        if (player == null) return false;
+
+        RotationSession.stopAll(user);
+        return true;
+    }
+
+
 
     // ── /mlsac upload ─────────────────────────────────────────────────────────
 
@@ -383,6 +472,72 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         player.spigot().sendMessage(ChatMessageType.ACTION_BAR, new TextComponent(message));
     }
 
+    private boolean handleSettt(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(Permissions.ADMIN) && !sender.hasPermission(Permissions.PLAY_ROTATION)) {
+            sender.sendMessage(getPrefix() + msg("no-permission"));
+            return true;
+        }
+        if (!(sender instanceof Player bukkitPlayer)) return false;
+        WalrusPlayer wp = WalrusPlayer.get(bukkitPlayer.getUniqueId());
+        if (wp == null) return false;
+        String file = args[1];
+        if (file == null || file.isEmpty()) {
+            wp.tt = new ArrayList<>();
+            return true;
+        }
+        List<TickData> ft = null;
+        try {
+            ft = plugin.getBansManager().loadAndClose(Main.instance, null, file);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        if (ft == null) return false;
+        wp.tt = ft;
+        return true;
+    }
+
+    public boolean handleOffBot(CommandSender sender) {
+        if (!sender.hasPermission(Permissions.COLLECT) && !sender.hasPermission(Permissions.ADMIN)) {
+            sender.sendMessage(getPrefix() + msg("no-permission"));
+            return true;
+        }
+
+        if (!(sender instanceof Player bukkitPlayer)) {
+            sender.sendMessage(ColorUtil.colorize("&cOnly players can use this command."));
+            return true;
+        }
+
+        WalrusPlayer player = WalrusPlayer.get(bukkitPlayer.getUniqueId());
+        if (player == null) return false;
+
+        for (NPC npc : player.cn) {
+            npc.despawn(player.user);
+        }
+        player.cn.clear();
+        return true;
+    }
+
+    public boolean handleTestBot(CommandSender sender) {
+        if (!sender.hasPermission(Permissions.COLLECT) && !sender.hasPermission(Permissions.ADMIN)) {
+            sender.sendMessage(getPrefix() + msg("no-permission"));
+            return true;
+        }
+
+        if (!(sender instanceof Player bukkitPlayer)) {
+            sender.sendMessage(ColorUtil.colorize("&cOnly players can use this command."));
+            return true;
+        }
+
+        WalrusPlayer player = WalrusPlayer.get(bukkitPlayer.getUniqueId());
+        if (player == null) return false;
+
+        Location location = new Location(player.position.x, player.position.y, player.position.z, player.yaw, player.pitch);
+        NPC npc = new NPC(ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), player.uuid, player.user.getName(), location);
+        npc.spawn(player.user);
+        player.cn.add(npc);
+        return true;
+    }
+
     // ── /mlsac reload ─────────────────────────────────────────────────────────
 
     private boolean handleReload(CommandSender sender) {
@@ -391,6 +546,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             return true;
         }
         plugin.reloadPluginConfig();
+        Main.instance.getBansManager().reloadDataset();
         sender.sendMessage(getPrefix() + msg("config-reloaded"));
         return true;
     }
@@ -692,8 +848,8 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> commands = Arrays.asList(
-                    "start", "stop", "trash", "datastatus", "alerts", "prob", "reload",
-                    "kicklist", "suspects", "punish", "profile", "train", "localstatus", "upload");
+                    "start", "stop", "trash", "datastatus", "alerts", "prob", "reload", "play", "stopplay", "reloadset",
+                    "kicklist", "suspects", "punish", "profile", "train", "localstatus", "upload", "target", "testbot", "removebot");
             completions.addAll(filterStartsWith(commands, args[0]));
         } else if (args.length == 2) {
             String sub = args[0].toLowerCase();
@@ -703,6 +859,10 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 completions.addAll(filterStartsWith(targets, args[1]));
             } else if (sub.equals("train")) {
                 completions.addAll(filterStartsWith(Arrays.asList("10", "50", "100", "200"), args[1]));
+            } else if (Arrays.asList("play", "target").contains(sub)) {
+                completions = Main.instance.getBansManager().datasets.stream()
+                        .filter(n -> n.toLowerCase().startsWith(args[1].toLowerCase()))
+                        .toList();
             }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("start")) {
             List<String> labels = Arrays.stream(Label.values())

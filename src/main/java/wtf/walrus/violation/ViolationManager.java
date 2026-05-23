@@ -28,31 +28,31 @@ import org.bukkit.entity.Player;
 import wtf.walrus.Main;
 import wtf.walrus.alert.AlertManager;
 import wtf.walrus.alert.FlagAction;
+import wtf.walrus.bans.BansManager;
 import wtf.walrus.checks.CheckType;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
 import wtf.walrus.config.Config;
+import wtf.walrus.config.Label;
 import wtf.walrus.config.PunishmentEntry;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.DamageVerdict;
 import wtf.walrus.data.MiningPlayerData;
+import wtf.walrus.data.TickData;
+import wtf.walrus.ml.MLOut;
 import wtf.walrus.penalty.ActionType;
 import wtf.walrus.penalty.PenaltyContext;
 import wtf.walrus.penalty.PenaltyExecutor;
+import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.util.ColorUtil;
 import wtf.walrus.util.PlayerListFormatter;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.logging.Logger;
@@ -218,6 +218,8 @@ public class ViolationManager {
                     plugin.debug("[AI] " + player.getName() + " punishment on cooldown, skipping " + actionType);
                     return;
                 }
+                if (checkType.equals(CheckType.AIM))        saveBData(data);
+                else if (checkType.equals(CheckType.BLOCK)) saveBData(miningData);
                 lastPunishmentTime.put(uuid, now);
             }
             executeCommand(command, player, probability, buffer, newVl);
@@ -230,6 +232,88 @@ public class ViolationManager {
             }
 
         }
+    }
+
+    public void saveBData(AIPlayerData data) {
+        if (!plugin.getBansManager().config.bdbConfig.isEnabled()) return;
+
+        WalrusPlayer player = WalrusPlayer.get(data.getPlayerId());
+        if (player == null) return;
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(data.ticksLog);
+            List<TickData> suspected = new ArrayList<>();
+            Set<TickData> seen = new HashSet<>();
+
+            int i = 0;
+            for (BansManager.ComparedWindow w : windows) {
+                if (++i <= 5) {
+                    plugin.getLogger().info(String.format("== %f : window[%d] <-> %s[%d]",
+                            w.score(), w.liveIdx(), w.file(), w.logIdx()));
+                }
+                if (w.score() > 0.75) {
+                    //MLOut mlOut = plugin.getLocalAIClientProvider().getModel().predict(w.liveTicks());
+                    w.liveTicks().stream()
+                            .filter(seen::add)
+                            .forEach(suspected::add);
+
+                }
+            }
+
+            try {
+                Main.instance.getBansManager().saveAndClose(Main.instance, null, player.user, Label.CHEAT, "", data.ticksLog);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+
+            if (!suspected.isEmpty()) {
+                try {
+                    Main.instance.getBansManager().saveAndClose(Main.instance, "filter", player.user, Label.CHEAT, "SUSPECTED", suspected);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+    }
+
+    public void saveBData(MiningPlayerData data) {
+        if (!plugin.getBansManager().config.bdbConfig.isEnabled()) return;
+
+        WalrusPlayer player = WalrusPlayer.get(data.getPlayerId());
+        if (player == null) return;
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(data.ticksLog);
+            List<TickData> suspected = new ArrayList<>();
+            Set<TickData> seen = new HashSet<>();
+
+            int i = 0;
+            for (BansManager.ComparedWindow w : windows) {
+                if (++i <= 5) {
+                    plugin.getLogger().info(String.format("== %f : window[%d] <-> %s[%d]",
+                            w.score(), w.liveIdx(), w.file(), w.logIdx()));
+                }
+                if (w.score() > 0.75) {
+                    w.liveTicks().stream()
+                            .filter(seen::add)
+                            .forEach(suspected::add);
+                }
+            }
+
+            try {
+                Main.instance.getBansManager().saveAndClose(Main.instance, null, player.user, Label.CHEAT, "", data.ticksLog);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+
+            if (!suspected.isEmpty()) {
+                try {
+                    Main.instance.getBansManager().saveAndClose(Main.instance, "filter", player.user, Label.CHEAT, "SUSPECTED", suspected);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
     }
 
     public boolean hasAction(Player player) {

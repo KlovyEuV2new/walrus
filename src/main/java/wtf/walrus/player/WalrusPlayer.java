@@ -1,34 +1,28 @@
 package wtf.walrus.player;
 
 import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.manager.server.ServerVersion;
 import com.github.retrooper.packetevents.protocol.player.ClientVersion;
 import com.github.retrooper.packetevents.protocol.player.GameMode;
 import com.github.retrooper.packetevents.protocol.player.User;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.PacketWrapper;
-import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientWindowConfirmation;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDisconnect;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowConfirmation;
-import io.github.retrooper.packetevents.adventure.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TranslatableComponent;
-import org.bukkit.Bukkit;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
 import wtf.walrus.Main;
+import wtf.walrus.bans.BansManager;
 import wtf.walrus.checks.manager.CheckManager;
 import wtf.walrus.data.PlayerRotationData;
-import wtf.walrus.util.SimulationUtil;
+import wtf.walrus.data.TickData;
+import wtf.walrus.hologram.NametagManager;
+import wtf.walrus.npc.NPC;
+import wtf.walrus.packetworld.PacketWorld;
+import wtf.walrus.packetworld.listener.PacketWorldListener;
+import wtf.walrus.util.ColorUtil;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,6 +44,36 @@ public class WalrusPlayer {
     public double deltaY, deltaXZ, deltaZ, deltaX, lastDeltaY, lastDeltaXZ, lastDeltaZ, lastDeltaX;
     public float lastYaw, yaw, deltaYaw, lastPitch, pitch, deltaPitch, lastDeltaPitch, lastDeltaYaw, flySpeed;
     public float health, absorption;
+
+    public List<TickData> tt = new ArrayList<>();
+    public List<NPC> cn = new ArrayList<>();
+
+    public void ctt(List<TickData> t) {
+        if (tt.isEmpty() || t.isEmpty()) return;
+
+        List<BansManager.ComparedWindow> c = Main.instance.getBansManager().compare(t, tt);
+        BansManager.ComparedWindow max = null;
+        for (BansManager.ComparedWindow w : c) {
+            if (max == null || w.score() > max.score()) {
+                max = w;
+            }
+        }
+
+        if (max != null) {
+            user.sendMessage(
+                    ColorUtil.colorize(
+                            String.format("%s%.4f&f [%d]",
+                                    NametagManager.getInfoColor(max.score()),
+                                    max.score(),
+                                    max.logIdx()
+                            )
+                    )
+            );
+        }
+    }
+
+    public final PacketWorld packetWorld;
+    public final PacketWorldListener worldListener;
 
     public final CheckManager checkManager;
     public final PlayerRotationData rotationData;
@@ -74,10 +98,17 @@ public class WalrusPlayer {
     public WalrusPlayer(User user, UUID uuid) {
         this.user = user;
         this.uuid = uuid;
-        this.checkManager = new CheckManager(this);
-        this.rotationData = new PlayerRotationData(this);
-        this.firstJoined = System.currentTimeMillis();
         this.entityID = user.getEntityId();
+
+        this.firstJoined = System.currentTimeMillis();
+
+        this.packetWorld = new PacketWorld();
+        this.worldListener = new PacketWorldListener(this, packetWorld);
+
+        this.rotationData = new PlayerRotationData(this);
+
+        this.checkManager = new CheckManager(this);
+
         players.add(this);
     }
 

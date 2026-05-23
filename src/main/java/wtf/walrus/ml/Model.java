@@ -25,6 +25,7 @@ public abstract class Model {
     public abstract double   predictFromFeatures(double[] raw);
     public abstract double[] extractFeatures(List<TickData> ticks);
     public abstract void     trainBatch(List<double[]> featuresList, List<Double> labels, int epochs);
+    public abstract MLOut compare(List<TickData> a, List<TickData> b);
 
     public abstract void    save(File dir) throws IOException;
     public abstract boolean load(File dir);

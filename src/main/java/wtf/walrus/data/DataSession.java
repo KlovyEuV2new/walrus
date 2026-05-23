@@ -127,6 +127,43 @@ public class DataSession {
         return String.format("%s_%s_%s.csv", statusForFilename, playerName, timestamp);
     }
 
+    public static String generateFileName(long startTime, Label label, String comment, String playerName) {
+        String timestamp = new SimpleDateFormat("yyyyMMdd-HHmmss")
+                .format(new Date(startTime));
+        String statusForFilename = label.name();
+        if (comment != null && !comment.isEmpty()) {
+            String sanitized = comment.replace(' ', '#')
+                    .replaceAll("[/\\\\?%*:|\"<>']", "-");
+            statusForFilename = statusForFilename + "_" + sanitized;
+        }
+        return String.format("%s_%s_%s.csv", statusForFilename, playerName, timestamp);
+    }
+
+    public static String generateCsvContent(Label label, List<TickData> recordedTicks) {
+        try {
+            if (recordedTicks.isEmpty()) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append(TickData.getHeader()).append("\n");
+
+            String cheatingStatus;
+            if (label == Label.CHEAT) {
+                cheatingStatus = "CHEAT";
+            } else if (label == Label.LEGIT) {
+                cheatingStatus = "LEGIT";
+            } else {
+                cheatingStatus = "UNLABELED";
+            }
+
+            List<TickData> ticks = new ArrayList<>(recordedTicks);
+            for (TickData tick : ticks) {
+                sb.append(tick.toCsv(cheatingStatus)).append("\n");
+            }
+            return sb.toString();
+        } finally {}
+    }
+
     public String generateCsvContent() {
         lock.readLock().lock();
         try {

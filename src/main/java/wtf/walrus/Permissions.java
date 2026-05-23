@@ -34,4 +34,5 @@ public final class Permissions {
     public static final String ADMIN = "walrus.admin";
     public static final String UPLOAD = "walrus.upload";
     public static final String COLLECT = "walrus.collect";
+    public static final String PLAY_ROTATION = "walrus.play.rotation";
 }

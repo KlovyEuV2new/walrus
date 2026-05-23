@@ -13,6 +13,7 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import wtf.walrus.alert.AlertManager;
+import wtf.walrus.bans.BansManager;
 import wtf.walrus.checks.Check;
 import wtf.walrus.checks.CheckTypeManager;
 import wtf.walrus.checks.impl.ai.AICheck;
@@ -28,8 +29,10 @@ import wtf.walrus.ml.Model;
 import wtf.walrus.ml.client.LocalAIClientProvider;
 import wtf.walrus.ml.managers.TrainingDataManager;
 import wtf.walrus.ml.managers.VerdictManager;
+import wtf.walrus.npc.NPC;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.punishment.PunishmentManager;
+import wtf.walrus.rotationloader.RotationSession;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIClientProvider;
 import wtf.walrus.server.AnalyticsClient;
@@ -87,6 +90,8 @@ public final class Main extends JavaPlugin {
     private CheckTypeManager checkTypeManager;
 
     private PunishListener bListener;
+
+    private BansManager bansManager;
 
     @Override
     public void onLoad() {
@@ -221,6 +226,7 @@ public final class Main extends JavaPlugin {
         this.tickListener.start();
         this.checkManagerListener = new CheckManagerListener();
         this.bListener = new PunishListener(this);
+        this.bansManager = new BansManager(this);
 
         for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
             this.tickListener.startPlayerTask(p);
@@ -249,6 +255,7 @@ public final class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        RotationSession.stopAll();
         commandHandler.handleStopAll(Bukkit.getConsoleSender());
         if (localAIClientProvider != null) {
             getLogger().info("[LocalML] Saving local model state...");
@@ -276,9 +283,17 @@ public final class Main extends JavaPlugin {
             }
         }
 
+        for (WalrusPlayer p : WalrusPlayer.getPlayers()) {
+            for (NPC npc : p.cn) {
+                npc.despawn(p.user);
+            }
+            p.cn.clear();
+        }
+
         if (PacketEvents.getAPI() != null && PacketEvents.getAPI().isInitialized()) {
             PacketEvents.getAPI().terminate();
         }
+
         SchedulerManager.reset();
         getLogger().info("MLSAC disabled successfully!");
     }
@@ -396,5 +411,9 @@ public final class Main extends JavaPlugin {
 
     public CheckTypeManager getCheckTypeManager() {
         return checkTypeManager;
+    }
+
+    public BansManager getBansManager() {
+        return bansManager;
     }
 }
