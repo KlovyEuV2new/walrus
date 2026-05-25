@@ -112,6 +112,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             case "target":       return handleSettt(sender, args);
             case "testbot":      return handleTestBot(sender);
             case "removebot":    return handleOffBot(sender);
+            case "bans":         return handleBans(sender);
             case "reloadset":    {
                 if (!sender.hasPermission(Permissions.PLAY_ROTATION) && !sender.hasPermission(Permissions.ADMIN)) {
                     sender.sendMessage(getPrefix() + msg("no-permission"));
@@ -126,6 +127,20 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 sendUsage(sender);
                 return true;
         }
+    }
+
+    private boolean handleBans(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(getPrefix() + msg("players-only"));
+            return true;
+        }
+        Player player = (Player) sender;
+        if (!player.hasPermission(Permissions.ADMIN) && !player.hasPermission(Permissions.BANS_MENU)) {
+            player.sendMessage(getPrefix() + msg("no-permission"));
+            return true;
+        }
+        new wtf.walrus.bans.menu.BansMenu(plugin, player).open();
+        return true;
     }
 
     private boolean handlePlayRot(CommandSender sender, String[] args) {
@@ -480,11 +495,11 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         if (!(sender instanceof Player bukkitPlayer)) return false;
         WalrusPlayer wp = WalrusPlayer.get(bukkitPlayer.getUniqueId());
         if (wp == null) return false;
-        String file = args[1];
-        if (file == null || file.isEmpty()) {
+        if (args.length < 2 || args[1].isEmpty()) {
             wp.tt = new ArrayList<>();
             return true;
         }
+        String file = args[1];
         List<TickData> ft = null;
         try {
             ft = plugin.getBansManager().loadAndClose(Main.instance, null, file);
@@ -848,7 +863,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> commands = Arrays.asList(
-                    "start", "stop", "trash", "datastatus", "alerts", "prob", "reload", "play", "stopplay", "reloadset",
+                    "start", "stop", "trash", "datastatus", "alerts", "prob", "reload", "play", "stopplay", "reloadset", "bans",
                     "kicklist", "suspects", "punish", "profile", "train", "localstatus", "upload", "target", "testbot", "removebot");
             completions.addAll(filterStartsWith(commands, args[0]));
         } else if (args.length == 2) {

@@ -10,10 +10,15 @@ package wtf.walrus;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.protocol.player.User;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
+import litebans.api.Database;
+import litebans.api.Entry;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import wtf.walrus.alert.AlertManager;
 import wtf.walrus.bans.BansManager;
+import wtf.walrus.bans.menu.BansMenu;
+import wtf.walrus.bans.menu.BansMenuConfig;
 import wtf.walrus.checks.Check;
 import wtf.walrus.checks.CheckTypeManager;
 import wtf.walrus.checks.impl.ai.AICheck;
@@ -25,6 +30,7 @@ import wtf.walrus.config.*;
 import wtf.walrus.datacollector.DataCollectorFactory;
 import wtf.walrus.hologram.NametagManager;
 import wtf.walrus.listeners.*;
+import wtf.walrus.menu.SuspectsMenu;
 import wtf.walrus.ml.Model;
 import wtf.walrus.ml.client.LocalAIClientProvider;
 import wtf.walrus.ml.managers.TrainingDataManager;
@@ -45,6 +51,8 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public final class Main extends JavaPlugin {
 
@@ -92,6 +100,9 @@ public final class Main extends JavaPlugin {
     private PunishListener bListener;
 
     private BansManager bansManager;
+    private BansMenuConfig bansMenuConfig;
+
+    private boolean litebansapi;
 
     @Override
     public void onLoad() {
@@ -110,6 +121,8 @@ public final class Main extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
+
+        litebansapi = Bukkit.getPluginManager().getPlugin("LiteBans") != null;
 
         TrainingDataManager.putDefaultModel(this, getDataFolder());
 
@@ -143,6 +156,9 @@ public final class Main extends JavaPlugin {
         this.messagesConfig.load();
         this.hologramConfig = new HologramConfig(this);
         this.hologramConfig.load();
+        this.bansMenuConfig = new BansMenuConfig(this);
+        BansMenu.reloadConfig(this);
+        SuspectsMenu.reloadConfig(this);
         this.checkTypeManager = new CheckTypeManager(getConfig());
 
         File mlsDataDir = new File(getDataFolder(), "mls/data");
@@ -306,6 +322,10 @@ public final class Main extends JavaPlugin {
                 if (menuConfig != null) menuConfig.reload();
                 if (messagesConfig != null) messagesConfig.reload();
                 if (hologramConfig != null) hologramConfig.reload();
+                if (bansManager != null) bansManager.reload();
+                if (bansMenuConfig != null) bansMenuConfig.reload();
+                BansMenu.reloadConfig(this);
+                SuspectsMenu.reloadConfig(this);
                 if (checkTypeManager != null) checkTypeManager.loadTypes(getConfig());
 
                 if (punishmentsConfig != null) {
@@ -370,6 +390,17 @@ public final class Main extends JavaPlugin {
         });
     }
 
+    public boolean isBanned(OfflinePlayer player) {
+        UUID uuid = player.getUniqueId();
+        return player.isBanned() || (litebansapi && Database.get().isPlayerBanned(uuid, null));
+    }
+
+    public Entry getBan(OfflinePlayer player) {
+        if (!litebansapi) return null;
+        UUID uuid = player.getUniqueId();
+        return Database.get().getBan(uuid, null, null);
+    }
+
     public Config getPluginConfig() { return config; }
     public MenuConfig getMenuConfig() { return menuConfig; }
     public MessagesConfig getMessagesConfig() { return messagesConfig; }
@@ -416,4 +447,6 @@ public final class Main extends JavaPlugin {
     public BansManager getBansManager() {
         return bansManager;
     }
+
+    public BansMenuConfig getBansMenuConfig() { return bansMenuConfig; }
 }

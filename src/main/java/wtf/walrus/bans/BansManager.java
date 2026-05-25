@@ -3,6 +3,7 @@ package wtf.walrus.bans;
 import com.github.retrooper.packetevents.protocol.player.User;
 import org.bukkit.Bukkit;
 import wtf.walrus.Main;
+import wtf.walrus.bans.config.BDRecord;
 import wtf.walrus.bans.config.BansConfig;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.DataSession;
@@ -18,7 +19,7 @@ public class BansManager {
     public final Main plugin;
 
     public List<String> datasets = new ArrayList<>();
-    public final BansConfig config;
+    public BansConfig config;
 
     public BansManager(Main plugin) {
         this.plugin = plugin;
@@ -171,7 +172,7 @@ public class BansManager {
         return ticks;
     }
 
-    public void saveAndClose(Main plugin, String sessionFolder, User user, Label label, String comment, List<TickData> ticks) throws IOException {
+    public void saveAndClose(Main plugin, String sessionFolder, User user, Label label, String comment, List<TickData> ticks, boolean base) throws IOException {
         String csvContent = DataSession.generateCsvContent(label, ticks);
         if (csvContent.isEmpty()) {
             plugin.getLogger().info("[DataSession] No ticks recorded for " + user.getName() + ", skipping save.");
@@ -190,8 +191,20 @@ public class BansManager {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
             writer.write(csvContent);
         }
-        config.bdbConfig.set(user.getUUID(), outputFile.getName(), System.currentTimeMillis());
-        plugin.getLogger().info("[BanSystem] Saved " + ticks.size() + " ticks to " + outputFile.getAbsolutePath());
+        long saveTime = System.currentTimeMillis();
+        if (base) {
+            config.bdbConfig.set(user.getUUID(), outputFile.getName(), saveTime);
+            String ownerName = user.getName();
+            BDRecord newRecord = new BDRecord(user.getUUID(), saveTime, outputFile.getName());
+            wtf.walrus.bans.menu.BansMenu.onRecordAdded(newRecord, ownerName);
+        } else {
+            config.bdbConfig.set(outputFile.getName(), saveTime);
+        }
+    }
+
+    public void reload() {
+        reloadDataset();
+        this.config = new BansConfig(this);
     }
 
     public List<TickData> loadAndClose(Main plugin, String sessionFolder, String fileName) throws IOException {
@@ -232,7 +245,6 @@ public class BansManager {
             }
         }
 
-        plugin.getLogger().info("[BanSystem] Loaded " + ticks.size() + " ticks from " + inputFile.getAbsolutePath());
         return ticks;
     }
 }

@@ -43,6 +43,50 @@ import java.util.stream.Collectors;
 
 public class SuspectsMenu implements Listener {
 
+    private static final class MenuConfig {
+        String title;
+        String headName;
+        List<String> headLore;
+        String prevName;
+        Material prevMat;
+        String nextName;
+        Material nextMat;
+        String infoName;
+        Material infoMat;
+        Material fillerMat;
+        String fillerName;
+
+        void reload(Main plugin) {
+            var cfg = plugin.getMenuConfig().getConfig();
+            title = cfg.getString("gui.title", "&cMLSAC &8> &7Suspects");
+            headName = cfg.getString("gui.items.suspect_head.name", "&c{PLAYER}");
+            headLore = cfg.getStringList("gui.items.suspect_head.lore");
+            if (headLore.isEmpty()) {
+                headLore = new ArrayList<>();
+                headLore.add("&7Средняя вероятность: {AVG_PROB}");
+                headLore.add("&7История: {HISTORY}");
+                headLore.add("");
+                headLore.add("&aЛКМ &8- &7Телепорт");
+                headLore.add("&cПКМ &8- &7Спектатор");
+            }
+            prevMat = parseMaterial(cfg.getString("gui.items.previous_page.material", "ARROW"));
+            prevName = cfg.getString("gui.items.previous_page.name", "&ePage {PAGE}");
+            nextMat = parseMaterial(cfg.getString("gui.items.next_page.material", "ARROW"));
+            nextName = cfg.getString("gui.items.next_page.name", "&ePage {PAGE}");
+            infoMat = parseMaterial(cfg.getString("gui.items.page_info.material", "PAPER"));
+            infoName = cfg.getString("gui.items.page_info.name", "&b{CURRENT}/{TOTAL}");
+            fillerMat = parseMaterial(cfg.getString("gui.items.filler.material", "GRAY_STAINED_GLASS_PANE"));
+            fillerName = cfg.getString("gui.items.filler.name", " ");
+        }
+
+        private static Material parseMaterial(String name) {
+            try { return Material.valueOf(name); }
+            catch (Exception e) { return Material.STONE; }
+        }
+    }
+
+    private static final MenuConfig menuConfig = new MenuConfig();
+
     private final JavaPlugin plugin;
     private final Player admin;
     private final Inventory inventory;
@@ -54,6 +98,10 @@ public class SuspectsMenu implements Listener {
     private BukkitTask updateTask;
     private static final int ITEMS_PER_PAGE = 45;
 
+    public static void reloadConfig(Main plugin) {
+        menuConfig.reload(plugin);
+    }
+
     public SuspectsMenu(JavaPlugin plugin, Player admin) {
         this.plugin = plugin;
         this.admin = admin;
@@ -62,9 +110,7 @@ public class SuspectsMenu implements Listener {
         this.miningCheck = main.getMiningCheck();
         this.analyticsClient = main.getAnalyticsClient();
         this.pluginConfig = main.getPluginConfig();
-        FileConfiguration config = main.getMenuConfig().getConfig();
-        String title = config.getString("gui.title", "&cMLSAC &8> &7Suspects");
-        this.inventory = Bukkit.createInventory(null, 54, ColorUtil.colorize(title));
+        this.inventory = Bukkit.createInventory(null, 54, ColorUtil.colorize(menuConfig.title));
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
@@ -122,30 +168,25 @@ public class SuspectsMenu implements Listener {
             }
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).thenRun(() -> {
-                FileConfiguration config = ((Main) plugin).getMenuConfig().getConfig();
                 ItemStack[] newContents = new ItemStack[54];
 
                 for (int i = 0; i < pageData.size(); i++) {
-                    newContents[i] = createSuspectHeadFromData(pageData.get(i), config);
+                    newContents[i] = createSuspectHeadFromData(pageData.get(i));
                 }
 
                 if (page > 0) {
-                    Material prevMat = Material.valueOf(config.getString("gui.items.previous_page.material", "ARROW"));
-                    newContents[45] = createButtonItem(prevMat, config.getString("gui.items.previous_page.name", "&ePage {PAGE}").replace("{PAGE}", String.valueOf(page)));
+                    newContents[45] = createButtonItem(menuConfig.prevMat, menuConfig.prevName.replace("{PAGE}", String.valueOf(page)));
                 }
 
-                Material infoMat = Material.valueOf(config.getString("gui.items.page_info.material", "PAPER"));
-                newContents[49] = createButtonItem(infoMat, config.getString("gui.items.page_info.name", "&b{CURRENT}/{TOTAL}")
+                newContents[49] = createButtonItem(menuConfig.infoMat, menuConfig.infoName
                         .replace("{CURRENT}", String.valueOf(page + 1))
                         .replace("{TOTAL}", String.valueOf(Math.max(1, totalPages))));
 
                 if (end < suspectDataList.size()) {
-                    Material nextMat = Material.valueOf(config.getString("gui.items.next_page.material", "ARROW"));
-                    newContents[53] = createButtonItem(nextMat, config.getString("gui.items.next_page.name", "&ePage {PAGE}").replace("{PAGE}", String.valueOf(page + 2)));
+                    newContents[53] = createButtonItem(menuConfig.nextMat, menuConfig.nextName.replace("{PAGE}", String.valueOf(page + 2)));
                 }
 
-                Material fillerMat = Material.valueOf(config.getString("gui.items.filler.material", "GRAY_STAINED_GLASS_PANE"));
-                ItemStack filler = createButtonItem(fillerMat, config.getString("gui.items.filler.name", " "));
+                ItemStack filler = createButtonItem(menuConfig.fillerMat, menuConfig.fillerName);
                 for (int i = 45; i < 54; i++) if (newContents[i] == null) newContents[i] = filler;
 
                 SchedulerManager.getAdapter().runSync(() -> {
@@ -196,15 +237,15 @@ public class SuspectsMenu implements Listener {
         }
     }
 
-    private ItemStack createSuspectHeadFromData(SuspectData data, FileConfiguration config) {
+    private ItemStack createSuspectHeadFromData(SuspectData data) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         if (meta != null) {
             Player suspect = Bukkit.getPlayer(data.uuid);
             meta.setOwningPlayer(suspect != null ? suspect : Bukkit.getOfflinePlayer(data.uuid));
-            meta.setDisplayName(ColorUtil.colorize(config.getString("gui.items.suspect_head.name", "&c{PLAYER}").replace("{PLAYER}", data.name)));
+            meta.setDisplayName(ColorUtil.colorize(menuConfig.headName.replace("{PLAYER}", data.name)));
 
-            List<String> loreFormat = config.getStringList("gui.items.suspect_head.lore");
+            List<String> loreFormat = menuConfig.headLore;
             List<String> lore = new ArrayList<>();
 
             int hitSec = (int) ((System.currentTimeMillis() - data.lastAttackTime) / 1000.0);
@@ -235,13 +276,11 @@ public class SuspectsMenu implements Listener {
                 lastHistStr = historyStr;
                 lastAvg = data.avgProbability;
                 lastHistory = data.history;
-                data.mineHistory.stream().skip(Math.max(0, data.mineHistory.size() - 5)).forEach(v -> lastHistStr.append(getColorInfo(v)).append(" "));
             } else if (lastClass instanceof MiningCheck) {
                 lastSec = mineSec;
                 lastHistStr = mineHistStr;
                 lastAvg = data.mineAvg;
                 lastHistory = data.mineHistory;
-                data.mineHistory.stream().skip(Math.max(0, data.mineHistory.size() - 5)).forEach(v -> lastHistStr.append(getColorInfo(v)).append(" "));
             } else {
                 lastHistStr = new StringBuilder();
                 invalidLast = true;
@@ -309,15 +348,25 @@ public class SuspectsMenu implements Listener {
         ItemStack item = event.getCurrentItem();
         if (item == null || item.getType() == Material.AIR) return;
 
-        FileConfiguration config = ((Main) plugin).getMenuConfig().getConfig();
-        if (event.getSlot() == 45 && page > 0) { page--; buildAndApply(true); return; }
-        if (event.getSlot() == 53) { page++; buildAndApply(true); return; }
+        if (event.getSlot() == 45 && page > 0) {
+            page--;
+            buildAndApply(true);
+            return;
+        }
+        if (event.getSlot() == 53) {
+            page++;
+            buildAndApply(true);
+            return;
+        }
 
         if (item.getItemMeta() instanceof SkullMeta meta) {
             Player target = meta.getOwningPlayer() != null ? meta.getOwningPlayer().getPlayer() : null;
             if (target != null && target.isOnline()) {
                 if (event.isLeftClick()) admin.teleport(target);
-                else if (event.isRightClick()) { admin.setGameMode(GameMode.SPECTATOR); admin.teleport(target); }
+                else if (event.isRightClick()) {
+                    admin.setGameMode(GameMode.SPECTATOR);
+                    admin.teleport(target);
+                }
             }
         }
     }

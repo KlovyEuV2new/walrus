@@ -1,0 +1,55 @@
+# =============================================
+#   MLSAC - BansMenu Configuration
+# =============================================
+# walrus.bans.menu - право для открытия (/walrus bans)
+#
+
+bans-gui:
+  title: "&8Петушатник"
+
+  items:
+    record_head:
+      name: "&#00E5FF▶ &f{BANNED}{PLAYER} &c#{INDEX}"
+      lore:
+        - ""
+        - " &#86EAF2Кол-во тиков: &a{TICKS}"
+        - " "
+        - " &#86EAF2Дата: &f{DATE}"
+        - " "
+        - " &#86EAF2Модератор: &f{BAN_MODER} &7#{BAN_ID}"
+        - " &#86EAF2Причина: &f{BAN_REASON}"
+        - " &#86EAF2Осталось: &f{BAN_DURATION}"
+        - ""
+        - " &8Файл:"
+        - " &8{FILE}"
+        - ""
+        - " &#00E5FF▶ &7Нажмите &8[Пкм], чтобы просмотреть"
+        - " &8Лкм, чтобы заблокировать"
+        - " &8Лкм+Шифт, чтобы убрать"
+
+    # Кнопка предыдущей страницы (слот 45)
+    previous_page:
+      material: ARROW
+      name: "&#00E5FF▶ &7Предыдущая страница (&f{PAGE}&7)"
+
+    # Инфо о текущей странице (слот 49)
+    page_info:
+      material: PAPER
+      name: "&#00E5FF▶ &7Страница &f{CURRENT} &8/ &f{TOTAL}"
+
+    # Кнопка следующей страницы (слот 53)
+    next_page:
+      material: ARROW
+      name: "&#00E5FF▶ &7Следующая страница (&f{PAGE}&7)"
+
+    # Заполнитель нижней панели
+    filler:
+      material: GRAY_STAINED_GLASS_PANE
+      name: " "
+
+  # Команды, выполняемые от консоли при ПКМ (бан игрока)
+  # Плейсхолдеры: {PLAYER} {UUID} {FILE} {MODER}
+  ban-commands:
+    - "tempban {PLAYER} 50d &cЧиты. Ошибка? Напишите в поддержку --sender={MODER}"
+  unban-commands:
+    - "unban {PLAYER} --sender={MODER}"

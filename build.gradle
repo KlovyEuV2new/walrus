@@ -10,6 +10,9 @@ version = "1.0-b${System.env.GITHUB_RUN_NUMBER ?: 'dev'}"
 repositories {
     mavenCentral()
     maven {
+        url = "https://jitpack.io"
+    }
+    maven {
         name = "papermc-repo"
         url = "https://repo.papermc.io/repository/maven-public/"
     }
@@ -44,6 +47,7 @@ dependencies {
     compileOnly 'com.sk89q.worldguard:worldguard-bukkit:7.0.9'
     compileOnly 'com.github.retrooper:packetevents-spigot:2.11.2'
     compileOnly 'org.geysermc.geyser:api:2.2.0-SNAPSHOT'
+    compileOnly "com.gitlab.ruany:LiteBansAPI:0.6.1"
     implementation 'com.google.flatbuffers:flatbuffers-java:24.3.25'
     implementation 'com.microsoft.signalr:signalr:8.0.0'
     implementation 'com.microsoft.signalr.messagepack:signalr-messagepack:8.0.0'

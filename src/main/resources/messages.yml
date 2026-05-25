@@ -12,6 +12,9 @@ no-permission: "&cУ вас недостаточно прав."
 player-not-found: "&fИгрок &cне найден&f."
 config-reloaded: "&fКонфигурация &aобновлена&f."
 
+bans-play-hint: "&7Ротация &e{FILE} &7воспроизводится. Чтобы остановить: &f/walrus stopplay"
+bans-ban-success: "&aФайл &e{FILE} &aперемещён в &7bdata/suspect&a."
+
 upload-started: "&eАрхивирование &f{COUNT} &eфайлов, подождите..."
 upload-success: "&a&lДатасет загружен!\n&7Файл: &f{FILE} &7({SIZE} MB)\n&7Ссылка: &b{URL}"
 upload-failed: "&cОшибка загрузки: &f{ERROR}"

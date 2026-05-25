@@ -1,6 +1,16 @@
+#
+# bans - это спец. система для логирования поведения игрока при наказаниях от ач
+#
+# /walrus bans - для открытия меню.
+#
 enabled: false
 
-bans:
-  #<uuid>:
-  #  time: 0
-  #  record: "1.csv"
+# лимит файлов
+limit:
+  bans:
+    files: 100
+  data:
+    files: 200
+
+bans: {}
+data: {}

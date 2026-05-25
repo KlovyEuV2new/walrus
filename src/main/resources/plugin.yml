@@ -4,6 +4,7 @@ main: wtf.walrus.Main
 api-version: '1.13'
 description: "MLSAC.WTF - Buy API"
 folia-supported: true
+softdepend: [LiteBans]
 
 commands:
   walrus:

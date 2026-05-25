@@ -22,7 +22,7 @@ gui:
         - " &f{LAST_ACTION} сек."
         - ""
         - " &#00E5FF▶ &7Нажмите &8[Пкм]&7, чтобы следить"
-        - " &8Лкм, что-бы телепортироваться"
+        - " &8Лкм, чтобы телепортироваться"
         #- "&7DB Detections: {DETECTIONS} {PROB_1}"
         #- "&7History (Last {HISTORY_SIZE}):"
         #- "{HISTORY}"

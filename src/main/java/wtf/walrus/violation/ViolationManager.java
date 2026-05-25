@@ -39,7 +39,6 @@ import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.DamageVerdict;
 import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.data.TickData;
-import wtf.walrus.ml.MLOut;
 import wtf.walrus.penalty.ActionType;
 import wtf.walrus.penalty.PenaltyContext;
 import wtf.walrus.penalty.PenaltyExecutor;
@@ -55,6 +54,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 public class ViolationManager {
@@ -242,35 +242,38 @@ public class ViolationManager {
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(data.ticksLog);
-            List<TickData> suspected = new ArrayList<>();
-            Set<TickData> seen = new HashSet<>();
+            List<TickData> cheat = new ArrayList<>(), suspected = new ArrayList<>();
+            Set<TickData> seen = new HashSet<>(), seenc = new HashSet<>();
 
-            int i = 0;
-            for (BansManager.ComparedWindow w : windows) {
-                if (++i <= 5) {
-                    plugin.getLogger().info(String.format("== %f : window[%d] <-> %s[%d]",
-                            w.score(), w.liveIdx(), w.file(), w.logIdx()));
-                }
-                if (w.score() > 0.75) {
-                    //MLOut mlOut = plugin.getLocalAIClientProvider().getModel().predict(w.liveTicks());
-                    w.liveTicks().stream()
-                            .filter(seen::add)
-                            .forEach(suspected::add);
+            AtomicInteger i = new AtomicInteger();
+            windows.stream()
+                    .peek(w -> {
+//                        if (i.incrementAndGet() < 5) {
+//                            plugin.getLogger().info("== %f : window[%d] <-> %s[%d]"
+//                                    .formatted(w.score(), w.liveIdx(), w.file(), w.logIdx()));
+//                        }
+                    })
+                    .forEach(w -> {
+                        double score = w.score();
+                        if (score > 0.99) {
+                            w.liveTicks().stream().filter(seenc::add).forEach(cheat::add);
+                        } else if (score > 0.75) {
+                            w.liveTicks().stream().filter(seen::add).forEach(suspected::add);
+                        }
+                    });
 
-                }
-            }
+            List<SaveTask> tasks = new ArrayList<>();
+            tasks.add(new SaveTask(null, Label.CHEAT, "", data.ticksLog, true));
+            if (!suspected.isEmpty()) tasks.add(new SaveTask("filter", Label.CHEAT, "SUSPECTED", suspected, false));
+            if (!cheat.isEmpty())     tasks.add(new SaveTask("hard",   Label.CHEAT, "HARD",      cheat,     false));
 
-            try {
-                Main.instance.getBansManager().saveAndClose(Main.instance, null, player.user, Label.CHEAT, "", data.ticksLog);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-
-            if (!suspected.isEmpty()) {
+            for (SaveTask t : tasks) {
                 try {
-                    Main.instance.getBansManager().saveAndClose(Main.instance, "filter", player.user, Label.CHEAT, "SUSPECTED", suspected);
+                    Main.instance.getBansManager().saveAndClose(
+                            Main.instance, t.folder(), player.user, t.label(), t.comment(), t.ticks(), t.base()
+                    );
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new RuntimeException("saveAndClose failed: folder=" + t.folder(), e);
                 }
             }
         });
@@ -284,37 +287,44 @@ public class ViolationManager {
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(data.ticksLog);
-            List<TickData> suspected = new ArrayList<>();
-            Set<TickData> seen = new HashSet<>();
+            List<TickData> cheat = new ArrayList<>(), suspected = new ArrayList<>();
+            Set<TickData> seen = new HashSet<>(), seenc = new HashSet<>();
 
-            int i = 0;
-            for (BansManager.ComparedWindow w : windows) {
-                if (++i <= 5) {
-                    plugin.getLogger().info(String.format("== %f : window[%d] <-> %s[%d]",
-                            w.score(), w.liveIdx(), w.file(), w.logIdx()));
-                }
-                if (w.score() > 0.75) {
-                    w.liveTicks().stream()
-                            .filter(seen::add)
-                            .forEach(suspected::add);
-                }
-            }
+            AtomicInteger i = new AtomicInteger();
+            windows.stream()
+                    .peek(w -> {
+//                        if (i.incrementAndGet() < 5) {
+//                            plugin.getLogger().info("== %f : window[%d] <-> %s[%d]"
+//                                    .formatted(w.score(), w.liveIdx(), w.file(), w.logIdx()));
+//                        }
+                    })
+                    .forEach(w -> {
+                        double score = w.score();
+                        if (score > 0.99) {
+                            w.liveTicks().stream().filter(seenc::add).forEach(cheat::add);
+                        } else if (score > 0.75) {
+                            w.liveTicks().stream().filter(seen::add).forEach(suspected::add);
+                        }
+                    });
 
-            try {
-                Main.instance.getBansManager().saveAndClose(Main.instance, null, player.user, Label.CHEAT, "", data.ticksLog);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            List<SaveTask> tasks = new ArrayList<>();
+            tasks.add(new SaveTask(null, Label.CHEAT, "", data.ticksLog, true));
+            if (!suspected.isEmpty()) tasks.add(new SaveTask("filter", Label.CHEAT, "SUSPECTED", suspected, false));
+            if (!cheat.isEmpty())     tasks.add(new SaveTask("hard",   Label.CHEAT, "HARD",      cheat,     false));
 
-            if (!suspected.isEmpty()) {
+            for (SaveTask t : tasks) {
                 try {
-                    Main.instance.getBansManager().saveAndClose(Main.instance, "filter", player.user, Label.CHEAT, "SUSPECTED", suspected);
+                    Main.instance.getBansManager().saveAndClose(
+                            Main.instance, t.folder(), player.user, t.label(), t.comment(), t.ticks(), t.base()
+                    );
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new RuntimeException("saveAndClose failed: folder=" + t.folder(), e);
                 }
             }
         });
     }
+
+    public record SaveTask(String folder, Label label, String comment, List<TickData> ticks, boolean base) {}
 
     public boolean hasAction(Player player) {
         for (FlagAction action : actions) if (action.name().equals(player.getName())) return true;
