@@ -4,6 +4,7 @@
 # /walrus bans - для открытия меню.
 #
 enabled: false
+max-log-size: 600
 
 # лимит файлов
 limit:

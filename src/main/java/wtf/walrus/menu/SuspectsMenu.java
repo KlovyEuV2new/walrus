@@ -110,6 +110,7 @@ public class SuspectsMenu implements Listener {
         this.miningCheck = main.getMiningCheck();
         this.analyticsClient = main.getAnalyticsClient();
         this.pluginConfig = main.getPluginConfig();
+        menuConfig.reload(main);
         this.inventory = Bukkit.createInventory(null, 54, ColorUtil.colorize(menuConfig.title));
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }

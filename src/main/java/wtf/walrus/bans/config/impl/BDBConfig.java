@@ -19,6 +19,7 @@ public class BDBConfig {
     public final Set<BDRecord> dataRecords = new HashSet<>();
 
     private boolean enabled = false;
+    private int maxLogSize;
 
     public final File file;
     public final FileConfiguration fileConfiguration;
@@ -46,6 +47,7 @@ public class BDBConfig {
         records.clear();
         dataRecords.clear();
         this.enabled = fileConfiguration.getBoolean("enabled", false);
+        this.maxLogSize = fileConfiguration.getInt("max-log-size", 600);
 
         ConfigurationSection bansSection = fileConfiguration.getConfigurationSection("bans");
         if (bansSection != null) {
@@ -228,5 +230,9 @@ public class BDBConfig {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public int getMaxLogSize() {
+        return maxLogSize;
     }
 }

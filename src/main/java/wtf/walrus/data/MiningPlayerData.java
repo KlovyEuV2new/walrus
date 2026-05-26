@@ -1,5 +1,6 @@
 package wtf.walrus.data;
 
+import wtf.walrus.Main;
 import wtf.walrus.util.AimProcessor;
 import wtf.walrus.util.BufferCalculator;
 
@@ -54,7 +55,7 @@ public class MiningPlayerData {
     }
 
     public void addLog(TickData tick) {
-        if (ticksLog.size() >= 600) {
+        if (ticksLog.size() >= Main.instance.getBansManager().config.bdbConfig.getMaxLogSize()) {
             ticksLog.remove(0);
         }
         ticksLog.add(tick);

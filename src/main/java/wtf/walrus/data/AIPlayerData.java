@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import wtf.walrus.Main;
 import wtf.walrus.util.AimProcessor;
 import wtf.walrus.util.BufferCalculator;
 
@@ -323,7 +324,7 @@ public class AIPlayerData {
     }
 
     public void addLog(TickData tick) {
-        if (ticksLog.size() >= 600) {
+        if (ticksLog.size() >= Main.instance.getBansManager().config.bdbConfig.getMaxLogSize()) {
             ticksLog.remove(0);
         }
         ticksLog.add(tick);

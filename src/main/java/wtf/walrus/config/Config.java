@@ -165,6 +165,11 @@ public class Config {
     public static final long DEFAULT_LOG_TIME = 300000L;
     public static final String DEFAULT_LOG_PERMISSION = "walrus.view.log";
 
+    private final boolean crossServerEnabled;
+    private final String crossServerMethod;
+    private final String serverId;
+    private final boolean crossServerAlerts;
+
     // ── Default constructor (no-arg / test) ───────────────────────────────────
     public Config() {
         this.debug = DEFAULT_DEBUG;
@@ -229,6 +234,10 @@ public class Config {
         this.logTime = DEFAULT_LOG_TIME;
         this.logPermission = DEFAULT_LOG_PERMISSION;
         this.logMaxPlayers = DEFAULT_LOG_MAX_PLAYERS;
+        crossServerEnabled = false;
+        crossServerMethod = "bungeecord";
+        serverId = "";
+        crossServerAlerts = false;
     }
 
     private static Set<String> createDefaultCheatReasons() {
@@ -408,6 +417,10 @@ public class Config {
         this.logTime = config.getLong("penalties.log.time", 300L) * 1000;
         this.logPermission = config.getString("penalties.log.time", DEFAULT_LOG_PERMISSION);
         this.logMaxPlayers = config.getInt("penalties.log.max-players", DEFAULT_LOG_MAX_PLAYERS);
+        this.crossServerEnabled = config.getBoolean("cross-server.enabled", false);
+        this.crossServerMethod = config.getString("cross-server.method", "bungeecord");
+        this.serverId = config.getString("cross-server.server-id", "unknown");
+        this.crossServerAlerts = config.getBoolean("cross-server.receive-alerts", true);
     }
 
     private double clampThreshold(double value, String configPath, Logger logger) {
@@ -564,4 +577,9 @@ public class Config {
     public int getLogMaxPlayers() {
         return logMaxPlayers;
     }
+
+    public boolean isCrossServerEnabled() { return crossServerEnabled; }
+    public String getCrossServerMethod() { return crossServerMethod; }
+    public String getServerId() { return serverId; }
+    public boolean isCrossServerAlerts() { return crossServerAlerts; }
 }
