@@ -2,12 +2,17 @@ package wtf.walrus.bans;
 
 import com.github.retrooper.packetevents.protocol.player.User;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import wtf.walrus.Main;
+import wtf.walrus.Permissions;
+import wtf.walrus.alert.AlertManager;
 import wtf.walrus.bans.config.BDRecord;
 import wtf.walrus.bans.config.BansConfig;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.DataSession;
 import wtf.walrus.data.TickData;
+import wtf.walrus.player.WalrusPlayer;
+import wtf.walrus.util.ColorUtil;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -96,10 +101,11 @@ public class BansManager {
                 .collect(Collectors.toList());
     }
 
-    public List<ComparedWindow> compare(List<TickData> ticks) {
+    public List<ComparedWindow> compare(List<TickData> ticks, String folder) {
         reloadDataset();
 
         File bdataFolder = new File(plugin.getDataFolder(), "mls/bdata");
+        if (folder != null && !folder.isEmpty()) bdataFolder = new File(bdataFolder, folder);
         if (!bdataFolder.exists()) return Collections.emptyList();
 
         List<File> bdataFiles;
@@ -151,7 +157,7 @@ public class BansManager {
                 .collect(Collectors.toList());
     }
 
-    private List<TickData> loadFromFile(File file, int labelId) throws IOException {
+    public List<TickData> loadFromFile(File file, int labelId) throws IOException {
         List<TickData> ticks = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             reader.readLine();
@@ -173,9 +179,13 @@ public class BansManager {
     }
 
     public void saveAndClose(Main plugin, String sessionFolder, User user, Label label, String comment, List<TickData> ticks, boolean base) throws IOException {
+        this.saveAndClose(plugin, sessionFolder, user.getName(), user.getUUID(), label, comment, ticks, base, false);
+    }
+
+    public void saveAndClose(Main plugin, String sessionFolder, String username, UUID uuid, Label label, String comment, List<TickData> ticks, boolean base, boolean nolimit) throws IOException {
         String csvContent = DataSession.generateCsvContent(label, ticks);
         if (csvContent.isEmpty()) {
-            plugin.getLogger().info("[DataSession] No ticks recorded for " + user.getName() + ", skipping save.");
+            plugin.getLogger().info("[DataSession] No ticks recorded for " + username + ", skipping save.");
             return;
         }
 
@@ -187,19 +197,76 @@ public class BansManager {
             dataFolder.mkdirs();
         }
 
-        File outputFile = new File(dataFolder, DataSession.generateFileName(System.currentTimeMillis(), Label.CHEAT, "BAN_LOG" + (!comment.isEmpty() ? "_" + comment : ""), user.getName()));
+        File outputFile = new File(dataFolder, DataSession.generateFileName(System.currentTimeMillis(), Label.CHEAT, "BAN_LOG" + (!comment.isEmpty() ? "_" + comment : ""), username));
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
             writer.write(csvContent);
         }
         long saveTime = System.currentTimeMillis();
         if (base) {
-            config.bdbConfig.set(user.getUUID(), outputFile.getName(), saveTime);
-            String ownerName = user.getName();
-            BDRecord newRecord = new BDRecord(user.getUUID(), saveTime, outputFile.getName());
+            config.bdbConfig.set(uuid, outputFile.getName(), saveTime, nolimit);
+            String ownerName = username;
+            BDRecord newRecord = new BDRecord(uuid, saveTime, outputFile.getName(), nolimit);
             wtf.walrus.bans.menu.BansMenu.onRecordAdded(newRecord, ownerName);
-        } else {
-            config.bdbConfig.set(outputFile.getName(), saveTime);
+            sendAlert(username, label, comment, outputFile.getName());
+        } if (!nolimit) {
+            config.bdbConfig.set(outputFile.getName(), saveTime, nolimit);
         }
+    }
+
+    public void sendAlert(String player, Label label, String comment, String file) {
+        for (Player bp : Bukkit.getOnlinePlayers()) {
+            if (((!bp.hasPermission(Permissions.ALERTS) || !bp.hasPermission(Permissions.BANS_MENU))
+                    && !bp.hasPermission(Permissions.ADMIN)) || !Main.instance.getAlertManager().hasEnabledAlerts(bp.getUniqueId())) continue;
+            bp.sendMessage(getPrefix() + placeholders(msg("bans-alert"), player, label, comment, file));
+        }
+    }
+
+    public String placeholders(String input, String player, Label label, String comment, String file) {
+        return input.replace("{PLAYER}", player)
+                .replace("{LABEL}", label.name())
+                .replace("{FILE}", file)
+                .replace("{COMMENT}", comment);
+    }
+
+    public void replaceLabel(String fileName, Label newLabel) {
+        File file = new File(plugin.getDataFolder(), "mls/bdata/" + fileName);
+
+        if (!file.exists()) return;
+
+        try {
+            List<String> lines = Files.readAllLines(file.toPath());
+
+            if (lines.isEmpty()) return;
+
+            List<String> rewritten = new ArrayList<>();
+            rewritten.add(lines.get(0));
+
+            for (int i = 1; i < lines.size(); i++) {
+                String line = lines.get(i);
+
+                if (line.isEmpty()) continue;
+                String[] split = line.split(",");
+                split[0] = String.valueOf(newLabel.getId());
+                rewritten.add(String.join(",", split));
+            }
+
+            Files.write(file.toPath(), rewritten);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String getPrefix() {
+        return ColorUtil.colorize(plugin.getMessagesConfig().getPrefix());
+    }
+
+    private String msg(String key) {
+        return ColorUtil.colorize(plugin.getMessagesConfig().getMessage(key));
+    }
+
+    private String msg(String key, String... replacements) {
+        return ColorUtil.colorize(plugin.getMessagesConfig().getMessage(key, replacements));
     }
 
     public void reload() {

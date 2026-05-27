@@ -1,6 +1,7 @@
 package wtf.walrus.data;
 
 import wtf.walrus.Main;
+import wtf.walrus.bans.config.impl.BDBConfig;
 import wtf.walrus.util.AimProcessor;
 import wtf.walrus.util.BufferCalculator;
 
@@ -26,7 +27,19 @@ public class MiningPlayerData {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private DamageVerdict damageVerdict;
 
-    public final List<TickData> ticksLog;
+    private final List<TickData> ticksLog;
+
+    public List<TickData> getTicksLog() {
+        return getTicksLog(true);
+    }
+
+    public List<TickData> getTicksLog(boolean amount) {
+        List<TickData> output = new ArrayList<>();
+        BDBConfig config = Main.instance.getBansManager().config.bdbConfig;
+        if (!amount || ticksLog.size() >= config.getMaxLogSize()) output.addAll(ticksLog);
+        if (!output.isEmpty()) ticksLog.clear();
+        return output;
+    }
 
     private final Deque<Double> q;
     private double sum = 0.0;

@@ -67,7 +67,8 @@ public class BDBConfig {
                     if (entry == null) continue;
                     long time = entry.getLong("time");
                     String record = entry.getString("record", entryId + ".csv");
-                    records.add(new BDRecord(uuid, time, record));
+                    boolean nolimit = entry.getBoolean("no-limit", false);
+                    records.add(new BDRecord(uuid, time, record, nolimit));
                 }
             }
         }
@@ -79,7 +80,8 @@ public class BDBConfig {
                 if (entry == null) continue;
                 long time = entry.getLong("time");
                 String record = entry.getString("record", entryId + ".csv");
-                dataRecords.add(new BDRecord(null, time, record));
+                boolean nolimit = entry.getBoolean("no-limit", false);
+                dataRecords.add(new BDRecord(null, time, record, nolimit));
             }
         }
     }
@@ -130,6 +132,7 @@ public class BDBConfig {
 
         List<BDRecord> sorted = dataRecords.stream()
                 .sorted(Comparator.comparingLong(BDRecord::time))
+                .filter(k -> !k.nolimit())
                 .collect(Collectors.toList());
 
         int toRemove = dataRecords.size() - limit;
@@ -164,20 +167,22 @@ public class BDBConfig {
         }
     }
 
-    public void set(UUID uuid, String record, long time) {
+    public void set(UUID uuid, String record, long time, boolean nolimit) {
         UUID entryId = UUID.randomUUID();
         fileConfiguration.set("bans." + uuid + "." + entryId + ".time", time);
         fileConfiguration.set("bans." + uuid + "." + entryId + ".record", record);
-        records.add(new BDRecord(uuid, time, record));
+        fileConfiguration.set("bans." + uuid + "." + entryId + ".no-limit", nolimit);
+        records.add(new BDRecord(uuid, time, record, nolimit));
         save();
         enforceBansLimit();
     }
 
-    public void set(String record, long time) {
+    public void set(String record, long time, boolean nolimit) {
         UUID entryId = UUID.randomUUID();
         fileConfiguration.set("data." + entryId + ".time", time);
         fileConfiguration.set("data." + entryId + ".record", record);
-        dataRecords.add(new BDRecord(null, time, record));
+        fileConfiguration.set("data." + entryId + ".no-limit", nolimit);
+        dataRecords.add(new BDRecord(null, time, record, nolimit));
         save();
         enforceDataLimit();
     }

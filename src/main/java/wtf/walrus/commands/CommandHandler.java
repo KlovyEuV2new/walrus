@@ -10,6 +10,7 @@ package wtf.walrus.commands;
 import com.github.retrooper.packetevents.protocol.player.User;
 import com.github.retrooper.packetevents.protocol.world.Location;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -17,6 +18,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
+import org.jetbrains.annotations.NotNull;
 import wtf.walrus.Main;
 import wtf.walrus.Permissions;
 import wtf.walrus.alert.AlertManager;
@@ -113,6 +115,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             case "testbot":      return handleTestBot(sender);
             case "removebot":    return handleOffBot(sender);
             case "bans":         return handleBans(sender);
+            case "save":         return handleSaveRot(sender, args);
             case "reloadset":    {
                 if (!sender.hasPermission(Permissions.PLAY_ROTATION) && !sender.hasPermission(Permissions.ADMIN)) {
                     sender.sendMessage(getPrefix() + msg("no-permission"));
@@ -373,6 +376,83 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             return true;
         }
         new wtf.walrus.menu.SuspectsMenu(plugin, player).open();
+        return true;
+    }
+
+    private boolean handleSaveRot(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(Permissions.ADMIN)) {
+            sender.sendMessage(getPrefix() + msg("no-permission"));
+            return true;
+        }
+        if (args.length < 4) {
+            sender.sendMessage("§cUsage: /walrus save <player> <label> <source> <comment>");
+            sender.sendMessage("§cSource: AIM or BLOCK");
+            return false;
+        }
+
+        try {
+            String playerName = args[1];
+            String labelName = args[2];
+            String sourceType = args[3].toUpperCase();
+            String comment = args.length >= 5 ? args[4] : "PLUGIN_LOG";
+
+            OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
+            UUID uuid = target.getUniqueId();
+
+            List<TickData> ticks = null;
+
+            if (sourceType.equals("AIM")) {
+                AIPlayerData p = Main.instance.getAiCheck().getPlayerData(uuid);
+                ticks = p.getTicksLog(false);
+                if (ticks.isEmpty()) {
+                    sender.sendMessage("§cNo AIM tick data found for " + playerName);
+                    return false;
+                }
+                sender.sendMessage("§aLoaded " + ticks.size() + " ticks from AIM data");
+
+            } else if (sourceType.equals("BLOCK")) {
+                MiningPlayerData p = Main.instance.getMiningCheck().getPlayerData(uuid);
+                ticks = p.getTicksLog(false);
+                if (ticks.isEmpty()) {
+                    sender.sendMessage("§cNo BLOCK tick data found for " + playerName);
+                    return false;
+                }
+                sender.sendMessage("§aLoaded " + ticks.size() + " ticks from BLOCK data");
+
+            } else {
+                sender.sendMessage("§cInvalid source. Use: AIM or BLOCK");
+                return false;
+            }
+
+            Label label;
+            try {
+                label = Label.valueOf(labelName.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                sender.sendMessage("§cInvalid label. Available: " + Arrays.toString(Label.values()));
+                return false;
+            }
+
+            try {
+                Main.instance.getBansManager().saveAndClose(
+                        Main.instance,
+                        null,
+                        playerName,
+                        uuid,
+                        label,
+                        comment,
+                        ticks,
+                        true,
+                        false
+                );
+
+                sender.sendMessage("§aSuccessfully saved " + sourceType + " data for " + playerName + " as " + label);
+                return true;
+            } catch (IOException e) {
+                sender.sendMessage("§cFailed to save data: " + e.getMessage());
+                e.printStackTrace();
+                return false;
+            }
+        } catch (Exception ignored) {}
         return true;
     }
 
@@ -863,7 +943,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         if (args.length == 1) {
             List<String> commands = Arrays.asList(
-                    "start", "stop", "trash", "datastatus", "alerts", "prob", "reload", "play", "stopplay", "reloadset", "bans",
+                    "start", "stop", "trash", "datastatus", "alerts", "prob", "reload", "play", "stopplay", "reloadset", "bans", "save",
                     "kicklist", "suspects", "punish", "profile", "train", "localstatus", "upload", "target", "testbot", "removebot");
             completions.addAll(filterStartsWith(commands, args[0]));
         } else if (args.length == 2) {

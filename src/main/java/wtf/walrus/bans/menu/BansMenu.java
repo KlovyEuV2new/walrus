@@ -27,7 +27,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.scheduler.BukkitTask;
 import wtf.walrus.Main;
+import wtf.walrus.bans.BansManager;
 import wtf.walrus.bans.config.BDRecord;
+import wtf.walrus.config.Label;
 import wtf.walrus.data.TickData;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.rotationloader.RotationSession;
@@ -36,6 +38,7 @@ import wtf.walrus.util.ColorUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -120,7 +123,7 @@ public class BansMenu implements Listener {
                 OfflinePlayer player = Bukkit.getOfflinePlayer(ownerName);
 
                 Entry ban = Main.instance.getBan(player);
-                CachedRecord cached = new CachedRecord(record, ownerName, ban != null, ban);
+                CachedRecord cached = new CachedRecord(record, ownerName, player.getUniqueId(), ban != null, ban);
                 recordCache.put(key, cached);
 
                 synchronized (sortedRecords) {
@@ -147,6 +150,7 @@ public class BansMenu implements Listener {
     private static final class CachedRecord {
         final BDRecord bdRecord;
         final String   ownerName;
+        final UUID ownerId;
         boolean        banned;
         Entry          ban;
         final long     time;
@@ -154,11 +158,12 @@ public class BansMenu implements Listener {
         volatile boolean loaded   = false;
         volatile int     tickCount = 0;
 
-        CachedRecord(BDRecord bdRecord, String ownerName, boolean banned, Entry ban) {
+        CachedRecord(BDRecord bdRecord, String ownerName, UUID ownerId, boolean banned, Entry ban) {
             this.bdRecord  = bdRecord;
             this.banned    = banned;
             this.ban       = ban;
             this.ownerName = ownerName;
+            this.ownerId = ownerId;
             this.time      = bdRecord.time();
             this.fileName  = bdRecord.record();
         }
@@ -205,7 +210,7 @@ public class BansMenu implements Listener {
                     String ownerName = getPlayerName(record.uuid());
                     OfflinePlayer player = Bukkit.getOfflinePlayer(ownerName);
                     Entry ban = Main.instance.getBan(player);
-                    return new CachedRecord(record, ownerName, ban != null, ban);
+                    return new CachedRecord(record, ownerName, player.getUniqueId(), ban != null, ban);
                 });
                 fresh.add(cached);
             }
@@ -272,7 +277,7 @@ public class BansMenu implements Listener {
                     String ownerName = getPlayerName(record.uuid());
                     OfflinePlayer player = Bukkit.getOfflinePlayer(ownerName);
                     Entry ban = Main.instance.getBan(player);
-                    CachedRecord cached = new CachedRecord(record, ownerName, ban != null, ban);
+                    CachedRecord cached = new CachedRecord(record, ownerName, player.getUniqueId(), ban != null, ban);
                     recordCache.put(key, cached);
                     loadTickCount(cached);
                     synchronized (sortedRecords) { sortedRecords.add(0, cached); }
@@ -442,7 +447,7 @@ public class BansMenu implements Listener {
                             ticks, crits);
                     Location loc = new Location(wp.position.x, wp.position.y, wp.position.z, wp.yaw, wp.pitch);
                     session.load(user, loc);
-                    player.sendMessage(ColorUtil.colorize(plugin.getMessagesConfig()
+                    player.sendMessage(ColorUtil.colorize(plugin.getMessagesConfig().getPrefix() + plugin.getMessagesConfig()
                             .getMessage("bans-play-hint", "{FILE}", cached.fileName)));
                 });
             } catch (IOException e) {
@@ -452,34 +457,122 @@ public class BansMenu implements Listener {
         });
     }
 
-    private void move(Player admin, CachedRecord cached) {
+    private void move(Player admin, CachedRecord cached, String folder, Label label) {
         SchedulerManager.getAdapter().runAsync(() -> {
             try {
                 File bdataFolder = new File(plugin.getDataFolder(), "mls/bdata");
-                File sourceFile  = new File(bdataFolder, cached.fileName);
-                if (!sourceFile.exists())
-                    sourceFile = new File(new File(plugin.getDataFolder(), "mls/data"), cached.fileName);
+
+                File sourceFile = new File(bdataFolder, cached.fileName);
+
+                if (!sourceFile.exists()) {
+                    sourceFile = new File(
+                            new File(plugin.getDataFolder(), "mls/data"),
+                            cached.fileName
+                    );
+                }
 
                 if (sourceFile.exists()) {
-                    File suspectFolder = new File(bdataFolder, "suspect");
-                    if (!suspectFolder.exists()) suspectFolder.mkdirs();
-                    File destFile = new File(suspectFolder, cached.fileName);
-                    if (!sourceFile.renameTo(destFile))
-                        plugin.getLogger().warning("[BansMenu] Failed to move " + cached.fileName);
+                    rewriteDatasetLabel(sourceFile, label);
+
+                    File suspectFolder = new File(bdataFolder, folder);
+                    if (!suspectFolder.exists()) {
+                        suspectFolder.mkdirs();
+                    }
+
+                    File destFile = new File(suspectFolder, label.name().toUpperCase()+"_" +cached.fileName);
+
+                    BansManager bansManager = Main.instance.getBansManager();
+                    List<TickData> ticks = bansManager.loadFromFile(sourceFile, Label.CHEAT.getId());
+                    if (!ticks.isEmpty()) {
+                        List<BansManager.ComparedWindow> windows = bansManager.compare(ticks, folder);
+
+                        List<TickData> medium = new ArrayList<>();
+                        List<TickData> hard = new ArrayList<>();
+                        Set<TickData> seenMedium = new HashSet<>();
+                        Set<TickData> seenHard = new HashSet<>();
+
+                        windows.forEach(w -> {
+                            double score = w.score();
+                            if (score > 0.95) {
+                                w.liveTicks().stream().filter(seenHard::add).forEach(hard::add);
+                            } else if (score > 0.75) {
+                                w.liveTicks().stream().filter(seenMedium::add).forEach(medium::add);
+                            }
+                        });
+
+                        if (!medium.isEmpty())
+                            bansManager.saveAndClose(Main.instance, folder + "_medium", cached.ownerName, cached.ownerId, label, "MEDIUM_SUSPECT", medium, false, true);
+                        if (!hard.isEmpty())
+                            bansManager.saveAndClose(Main.instance, folder + "_hard", cached.ownerName, cached.ownerId, label, "HARD_SUSPECT", hard, false, true);
+                    }
+
+                    if (!sourceFile.renameTo(destFile)) {
+                        plugin.getLogger().warning(
+                                "[BansMenu] Failed to move " + cached.fileName
+                        );
+                    }
                 }
+
             } catch (Exception e) {
-                plugin.getLogger().warning("[BansMenu] Error moving file: " + e.getMessage());
+                plugin.getLogger().warning(
+                        "[BansMenu] Error moving file: " + e.getMessage()
+                );
             }
 
             recordCache.remove(cached.fileName);
-            synchronized (sortedRecords) { sortedRecords.remove(cached); }
+
+            synchronized (sortedRecords) {
+                sortedRecords.remove(cached);
+            }
+
             plugin.getBansManager().config.bdbConfig.remove(cached.fileName);
 
-            String msg = ColorUtil.colorize(plugin.getMessagesConfig()
-                    .getMessage("bans-ban-success", "{PLAYER}", cached.ownerName, "{FILE}", cached.fileName));
+            String msg = ColorUtil.colorize(plugin.getMessagesConfig().getPrefix() +
+                    plugin.getMessagesConfig().getMessage(
+                            "bans-ban-success",
+                            "{PLAYER}", cached.ownerName,
+                            "{FILE}", cached.fileName
+                    )
+            );
+
             SchedulerManager.getAdapter().runSync(() -> admin.sendMessage(msg));
             buildAndApply(true);
         });
+    }
+
+    private void rewriteDatasetLabel(File file, Label label) {
+        try {
+            List<String> lines = Files.readAllLines(file.toPath());
+
+            if (lines.isEmpty()) {
+                return;
+            }
+
+            List<String> rewritten = new ArrayList<>();
+            rewritten.add(lines.get(0));
+
+            for (int i = 1; i < lines.size(); i++) {
+                String line = lines.get(i);
+
+                if (line.isEmpty()) {
+                    continue;
+                }
+                String[] split = line.split(",");
+
+                if (split.length < 9) {
+                    continue;
+                }
+
+                split[0] = String.valueOf(label.getId());
+                rewritten.add(String.join(",", split));
+            }
+
+            Files.write(file.toPath(), rewritten);
+        } catch (Exception e) {
+            plugin.getLogger().warning(
+                    "[BansMenu] Failed to rewrite dataset label: " + e.getMessage()
+            );
+        }
     }
 
     private void ban(Player admin, CachedRecord cached) {
@@ -532,11 +625,13 @@ public class BansMenu implements Listener {
             playRotation(clicker, cached, true);
         } else if (event.isLeftClick() && !event.isShiftClick()) {
             ban(clicker, cached);
-            move(clicker, cached);
+            move(clicker, cached, "suspect", Label.CHEAT);
         } else if (event.isShiftClick() && event.isLeftClick()) {
             plugin.getBansManager().config.bdbConfig.delete(cached.fileName);
-        } else if (event.getClick().isKeyboardClick()) {
-            move(clicker, cached);
+        } else if (event.getClick() == ClickType.DROP) {
+            move(clicker, cached, "suspect", Label.CHEAT);
+        } else if (event.getClick() == ClickType.CONTROL_DROP) {
+            move(clicker, cached, "legit", Label.LEGIT);
         } else if (event.getClick() == ClickType.MIDDLE) {
             if (cached.banned) {
                 unban(clicker, cached);

@@ -240,8 +240,11 @@ public class ViolationManager {
         WalrusPlayer player = WalrusPlayer.get(data.getPlayerId());
         if (player == null) return;
 
+        List<TickData> ticks = data.getTicksLog();
+        if (ticks.isEmpty()) return;
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(data.ticksLog);
+            List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(ticks, "");
             List<TickData> cheat = new ArrayList<>(), suspected = new ArrayList<>();
             Set<TickData> seen = new HashSet<>(), seenc = new HashSet<>();
 
@@ -255,7 +258,7 @@ public class ViolationManager {
                     })
                     .forEach(w -> {
                         double score = w.score();
-                        if (score > 0.99) {
+                        if (score > 0.95) {
                             w.liveTicks().stream().filter(seenc::add).forEach(cheat::add);
                         } else if (score > 0.75) {
                             w.liveTicks().stream().filter(seen::add).forEach(suspected::add);
@@ -263,7 +266,7 @@ public class ViolationManager {
                     });
 
             List<SaveTask> tasks = new ArrayList<>();
-            tasks.add(new SaveTask(null, Label.CHEAT, "", data.ticksLog, true));
+            tasks.add(new SaveTask(null, Label.CHEAT, "", ticks, true));
             if (!suspected.isEmpty()) tasks.add(new SaveTask("filter", Label.CHEAT, "SUSPECTED", suspected, false));
             if (!cheat.isEmpty())     tasks.add(new SaveTask("hard",   Label.CHEAT, "HARD",      cheat,     false));
 
@@ -285,8 +288,11 @@ public class ViolationManager {
         WalrusPlayer player = WalrusPlayer.get(data.getPlayerId());
         if (player == null) return;
 
+        List<TickData> ticks = data.getTicksLog();
+        if (ticks.isEmpty()) return;
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(data.ticksLog);
+            List<BansManager.ComparedWindow> windows = Main.instance.getBansManager().compare(ticks, "");
             List<TickData> cheat = new ArrayList<>(), suspected = new ArrayList<>();
             Set<TickData> seen = new HashSet<>(), seenc = new HashSet<>();
 
@@ -300,7 +306,7 @@ public class ViolationManager {
                     })
                     .forEach(w -> {
                         double score = w.score();
-                        if (score > 0.99) {
+                        if (score > 0.95) {
                             w.liveTicks().stream().filter(seenc::add).forEach(cheat::add);
                         } else if (score > 0.75) {
                             w.liveTicks().stream().filter(seen::add).forEach(suspected::add);
@@ -308,7 +314,7 @@ public class ViolationManager {
                     });
 
             List<SaveTask> tasks = new ArrayList<>();
-            tasks.add(new SaveTask(null, Label.CHEAT, "", data.ticksLog, true));
+            tasks.add(new SaveTask(null, Label.CHEAT, "", ticks, true));
             if (!suspected.isEmpty()) tasks.add(new SaveTask("filter", Label.CHEAT, "SUSPECTED", suspected, false));
             if (!cheat.isEmpty())     tasks.add(new SaveTask("hard",   Label.CHEAT, "HARD",      cheat,     false));
 

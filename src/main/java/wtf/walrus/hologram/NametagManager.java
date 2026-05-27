@@ -64,6 +64,17 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     private ScheduledTask task;
     private int cleanupCounter = 0;
 
+    private String format;
+    private double baseOffset;
+    private boolean enabled;
+
+    private static final LegacyComponentSerializer legacySerializer =
+            LegacyComponentSerializer.builder()
+                    .character('&')
+                    .hexColors()
+                    .useUnusualXRepeatedCharacterHexFormat()
+                    .build();
+
     public NametagManager(JavaPlugin plugin, AICheck aiCheck, MiningCheck miningCheck) {
         super(PacketListenerPriority.NORMAL);
         this.plugin = plugin;
@@ -72,10 +83,9 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     }
 
     public void start() {
-        FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
-        if (!config.getBoolean("nametags.enabled", true))
-            return;
         reload((Main) plugin);
+        if (!enabled)
+            return;
 
         PacketEvents.getAPI().getEventManager().registerListener(this);
         Bukkit.getPluginManager().registerEvents(this, plugin);
@@ -97,6 +107,24 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         lastSentText.clear();
         viewersMap.clear();
         permCache.clear();
+    }
+
+    private static final String NL = "{NL}";
+
+    private String[] splitFast(String input) {
+        ArrayList<String> result = new ArrayList<>(4);
+
+        int start = 0;
+        int idx;
+
+        while ((idx = input.indexOf(NL, start)) != -1) {
+            result.add(input.substring(start, idx));
+            start = idx + NL.length();
+        }
+
+        result.add(input.substring(start));
+
+        return result.toArray(new String[0]);
     }
 
     private boolean hasViewPermission(Player player) {
@@ -149,8 +177,6 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 return;
 
             Vector3d pos = flying.getLocation().getPosition();
-            FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
-            double baseOffset = config.getDouble("nametags.height_offset", 2.3);
 
             Set<UUID> viewers = viewersMap.get(player.getUniqueId());
             if (viewers == null)
@@ -229,9 +255,6 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         if (data == null || miningData == null)
             return;
 
-        FileConfiguration config = ((Main) plugin).getHologramConfig().getConfig();
-        String format = config.getString("nametags.format", "&6▶ &7AVG: &f{AVG} &8| {HISTORY} &6◀");
-
         double avgProb = data.getFormatedAverageProbability();
         double mineAvgProb = miningData.getFormatedAverageProbability();
 
@@ -273,25 +296,92 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             invalidLast = true;
         }
 
-        String filled = format
-                .replace("{LAST}", Main.instance.getCheckTypeManager().getName(lastType))
-                .replace("{AVG}", FastMath.format(avgProb, 4))
-                .replace("{MINE_AVG}", FastMath.format(mineAvgProb, 4))
-                .replace("{MINE_AVG_COLORED}", getColorInfo(mineAvgProb))
-                .replace("{MINE_HISTORY}", mineHistoryStr)
-                .replace("{AVG_COLORED}", getColorInfo(avgProb))
-                .replace("{HISTORY}", historyStr)
-                .replace("{LAST_AVG}", FastMath.format(lastAvg, 4))
-                .replace("{LAST_AVG_COLORED}", getColorInfo(lastAvg))
-                .replace("{LAST_FULL_PERCENT}", String.valueOf(lastPercent))
-                .replace("{LAST_PERCENT_FULL_COLOR}", getInfoColor(lastFullAvg))
-                .replace("{LAST_PERCENT}", String.valueOf((int) (lastAvg * 100)))
-                .replace("{LAST_PERCENT_COLOR}", getInfoColor(lastAvg))
-                .replace("{LAST_HISTORY}", lastHistStr);
+        StringBuilder sb = new StringBuilder(format.length() + 128);
 
-        String[] lines = filled.split("\\{NL\\}", -1);
+        int a = 0;
 
-        double baseOffset = config.getDouble("nametags.height_offset", 2.3);
+        while (a < format.length()) {
+            char c = format.charAt(a);
+
+            if (c == '{') {
+                int end = format.indexOf('}', a);
+                if (end != -1) {
+                    String key = format.substring(a, end + 1);
+
+                    switch (key) {
+
+                        case "{LAST}":
+                            sb.append(Main.instance.getCheckTypeManager().getName(lastType));
+                            break;
+
+                        case "{AVG}":
+                            sb.append(FastMath.format(avgProb, 4));
+                            break;
+
+                        case "{MINE_AVG}":
+                            sb.append(FastMath.format(mineAvgProb, 4));
+                            break;
+
+                        case "{MINE_AVG_COLORED}":
+                            sb.append(getColorInfo(mineAvgProb));
+                            break;
+
+                        case "{MINE_HISTORY}":
+                            sb.append(mineHistoryStr);
+                            break;
+
+                        case "{AVG_COLORED}":
+                            sb.append(getColorInfo(avgProb));
+                            break;
+
+                        case "{HISTORY}":
+                            sb.append(historyStr);
+                            break;
+
+                        case "{LAST_AVG}":
+                            sb.append(FastMath.format(lastAvg, 4));
+                            break;
+
+                        case "{LAST_AVG_COLORED}":
+                            sb.append(getColorInfo(lastAvg));
+                            break;
+
+                        case "{LAST_FULL_PERCENT}":
+                            sb.append(lastPercent);
+                            break;
+
+                        case "{LAST_PERCENT_FULL_COLOR}":
+                            sb.append(getInfoColor(lastFullAvg));
+                            break;
+
+                        case "{LAST_PERCENT}":
+                            sb.append((int) (lastAvg * 100));
+                            break;
+
+                        case "{LAST_PERCENT_COLOR}":
+                            sb.append(getInfoColor(lastAvg));
+                            break;
+
+                        case "{LAST_HISTORY}":
+                            sb.append(lastHistStr);
+                            break;
+
+                        default:
+                            sb.append(key);
+                            break;
+                    }
+
+                    a = end + 1;
+                    continue;
+                }
+            }
+
+            sb.append(c);
+            a++;
+        }
+        String filled = sb.toString();
+
+        String[] lines = splitFast(filled);
         Location baseLoc = target.getLocation();
 
         int[] existingIds = armorStandIds.get(target.getUniqueId());
@@ -316,7 +406,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                 continue;
 
             if (!viewer.getWorld().equals(target.getWorld()) ||
-                    viewer.getLocation().distanceSquared(baseLoc) > 10000) {
+                    viewer.getLocation().distanceSquared(baseLoc) > 2304) {
                 removeViewer(target.getUniqueId(), viewer);
                 continue;
             }
@@ -448,12 +538,6 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         metadata.add(new EntityData<Byte>(
                 0, EntityDataTypes.BYTE, (byte) 0x20));
 
-        LegacyComponentSerializer legacySerializer =
-                LegacyComponentSerializer.builder()
-                        .character('&')
-                        .hexColors()
-                        .useUnusualXRepeatedCharacterHexFormat()
-                        .build();
         Component component = legacySerializer.deserialize(text);
 
         if (version >= 766) {
@@ -508,6 +592,9 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     public void reload(Main plugin) {
         FileConfiguration holoConfig = plugin.getHologramConfig().getConfig();
         PERM_CACHE_TTL = holoConfig.getInt("ttl-update", 40) * 50L;
+        format = holoConfig.getString("nametags.format", "&6▶ &7AVG: &f{AVG} &8| {HISTORY} &6◀");;
+        baseOffset = holoConfig.getDouble("nametags.height_offset", 2.3);
+        enabled = holoConfig.getBoolean("nametags.enabled", true);
     }
 
     public static String getInfoColor(double val) {
