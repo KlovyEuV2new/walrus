@@ -373,25 +373,101 @@ public class BansMenu implements Listener {
         return head;
     }
 
-    private String applyPlaceholders(String template, CachedRecord cached, int globalIndex, String dateStr) {
-        String banDuration = cached.ban != null ? cached.ban.getRemainingDurationString(System.currentTimeMillis()) : "-";
-        String banReason   = cached.ban != null ? cached.ban.getReason() : "-";
-        String banType     = cached.ban != null ? cached.ban.getType() : "-";
-        String banModer    = cached.ban != null && cached.ban.getExecutorName() != null ? cached.ban.getExecutorName() : "-";
-        String banId       = cached.ban != null ? String.valueOf(cached.ban.getId()) : "-";
+    private String applyPlaceholders(String template,
+                                     CachedRecord cached,
+                                     int globalIndex,
+                                     String dateStr) {
 
-        return template
-                .replace("{PLAYER}",       cached.ownerName)
-                .replace("{BANNED}",       cached.banned ? "&c" : "")
-                .replace("{BAN_DURATION}", banDuration)
-                .replace("{BAN_REASON}",   banReason)
-                .replace("{BAN_TYPE}",     banType)
-                .replace("{BAN_MODER}",    banModer)
-                .replace("{BAN_ID}",       banId)
-                .replace("{FILE}",         cached.fileName)
-                .replace("{DATE}",         dateStr != null ? dateStr : "")
-                .replace("{UUID}",         cached.bdRecord.uuid().toString())
-                .replace("{INDEX}",        String.valueOf(globalIndex + 1));
+        String banDuration = cached.ban != null
+                ? cached.ban.getRemainingDurationString(System.currentTimeMillis())
+                : "-";
+
+        String banReason = cached.ban != null
+                ? cached.ban.getReason()
+                : "-";
+
+        String banType = cached.ban != null
+                ? cached.ban.getType()
+                : "-";
+
+        String banModer = (cached.ban != null && cached.ban.getExecutorName() != null)
+                ? cached.ban.getExecutorName()
+                : "-";
+
+        String banId = cached.ban != null
+                ? String.valueOf(cached.ban.getId())
+                : "-";
+
+        StringBuilder sb = new StringBuilder(template.length() + 128);
+
+        for (int i = 0; i < template.length(); i++) {
+            char c = template.charAt(i);
+
+            if (c == '{') {
+                int end = template.indexOf('}', i);
+                if (end != -1) {
+                    String key = template.substring(i, end + 1);
+
+                    switch (key) {
+
+                        case "{PLAYER}":
+                            sb.append(cached.ownerName);
+                            break;
+
+                        case "{BANNED}":
+                            sb.append(cached.banned ? "&c" : "");
+                            break;
+
+                        case "{BAN_DURATION}":
+                            sb.append(banDuration);
+                            break;
+
+                        case "{BAN_REASON}":
+                            sb.append(banReason);
+                            break;
+
+                        case "{BAN_TYPE}":
+                            sb.append(banType);
+                            break;
+
+                        case "{BAN_MODER}":
+                            sb.append(banModer);
+                            break;
+
+                        case "{BAN_ID}":
+                            sb.append(banId);
+                            break;
+
+                        case "{FILE}":
+                            sb.append(cached.fileName);
+                            break;
+
+                        case "{DATE}":
+                            sb.append(dateStr != null ? dateStr : "");
+                            break;
+
+                        case "{UUID}":
+                            sb.append(cached.bdRecord.uuid());
+                            break;
+
+                        case "{INDEX}":
+                            sb.append(globalIndex + 1);
+                            break;
+
+                        default:
+                            sb.append(key);
+                            break;
+                    }
+
+                    i = end;
+                    continue;
+                }
+            }
+
+            sb.append(c);
+        }
+
+        return sb.toString();
     }
 
     private ItemStack createButton(Material material, String name) {
