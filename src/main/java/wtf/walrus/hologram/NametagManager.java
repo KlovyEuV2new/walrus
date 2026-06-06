@@ -392,7 +392,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         int[] entityIds = armorStandIds.computeIfAbsent(target.getUniqueId(), k -> {
             int[] ids = new int[lines.length];
             for (int i = 0; i < lines.length; i++) {
-                ids[i] = ThreadLocalRandom.current().nextInt(1000000, 2000000);
+                ids[i] = ThreadLocalRandom.current().nextInt(Integer.MIN_VALUE, -1000000);
             }
             return ids;
         });

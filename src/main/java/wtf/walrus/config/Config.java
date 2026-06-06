@@ -88,6 +88,9 @@ public class Config {
     // ── Models ────────────────────────────────────────────────────────────────
     private final Map<String, String> modelNames;
     private final Map<String, Boolean> modelOnlyAlert;
+    private final Map<String, Boolean> disabledModel;
+
+    private final List<String> disabledModels, modelsOnlyAlert;
 
     // ── Analytics ─────────────────────────────────────────────────────────────
     private final boolean analyticsEnabled;
@@ -218,6 +221,9 @@ public class Config {
         this.foliaRegionSchedulerEnabled = DEFAULT_FOLIA_REGION_SCHEDULER_ENABLED;
         this.modelNames = new HashMap<>();
         this.modelOnlyAlert = new HashMap<>();
+        this.disabledModel = new HashMap<>();
+        this.modelsOnlyAlert = new ArrayList<>();
+        this.disabledModels = new ArrayList<>();
         this.analyticsEnabled = DEFAULT_ANALYTICS_ENABLED;
         this.analyticsMinDetections = DEFAULT_ANALYTICS_MIN_DETECTIONS;
         this.analyticsColorGreenMax = DEFAULT_ANALYTICS_COLOR_GREEN_MAX;
@@ -380,6 +386,9 @@ public class Config {
         // ── Models ────────────────────────────────────────────────────────────
         this.modelNames = new HashMap<>();
         this.modelOnlyAlert = new HashMap<>();
+        this.disabledModel = new HashMap<>();
+        this.modelsOnlyAlert = new ArrayList<>();
+        this.disabledModels = new ArrayList<>();
         ConfigurationSection modelsSection = config.getConfigurationSection("detection.models");
         if (modelsSection != null) {
             for (String modelKey : modelsSection.getKeys(false)) {
@@ -387,13 +396,18 @@ public class Config {
                 if (modelSection != null) {
                     String displayName = modelSection.getString("name", modelKey);
                     boolean onlyAlertForModel = modelSection.getBoolean("only-alert", false);
+                    boolean enabledModel = modelSection.getBoolean("enabled", true);
                     modelNames.put(modelKey, displayName);
                     modelOnlyAlert.put(modelKey, onlyAlertForModel);
+                    disabledModel.put(modelKey, !enabledModel);
+                    if (onlyAlertForModel) modelsOnlyAlert.add(modelKey);
+                    if (!enabledModel) disabledModels.add(modelKey);
                 } else {
                     String displayName = modelsSection.getString(modelKey);
                     if (displayName != null && !displayName.isEmpty()) {
                         modelNames.put(modelKey, displayName);
                         modelOnlyAlert.put(modelKey, false);
+                        disabledModel.put(modelKey, false);
                     }
                 }
             }
@@ -515,6 +529,11 @@ public class Config {
         return modelOnlyAlert.getOrDefault(modelKey, false);
     }
 
+    public boolean isDisabledModel(String modelKey) {
+        if (modelKey == null) return false;
+        return disabledModel.getOrDefault(modelKey, false);
+    }
+
     public String getModelDisplayName(String modelKey) {
         if (modelKey == null) return "Unknown";
         return modelNames.getOrDefault(modelKey, modelKey);
@@ -576,6 +595,14 @@ public class Config {
 
     public int getLogMaxPlayers() {
         return logMaxPlayers;
+    }
+
+    public List<String> getDisabledModels() {
+        return disabledModels;
+    }
+
+    public List<String> getModelsOnlyAlert() {
+        return modelsOnlyAlert;
     }
 
     public boolean isCrossServerEnabled() { return crossServerEnabled; }

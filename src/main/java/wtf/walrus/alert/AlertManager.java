@@ -34,6 +34,7 @@ import wtf.walrus.hologram.NametagManager;
 import wtf.walrus.ml.impl.MLPModel;
 import wtf.walrus.scheduler.SchedulerAdapter;
 import wtf.walrus.scheduler.SchedulerManager;
+import wtf.walrus.server.AIResponse;
 import wtf.walrus.util.ColorUtil;
 import java.util.Set;
 import java.util.UUID;
@@ -113,8 +114,12 @@ public class AlertManager {
         });
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType) {
-        String message = formatAlertMessage(suspectName, probability, buffer, modelName, bestNames, checkType);
+    public void sendAlert(String suspectName, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType, AIResponse best) {
+        String message = ColorUtil.colorize(formatAlertMessage(suspectName, probability, buffer, modelName, bestNames, checkType)
+                .replace("{BEST_PROBABILITY}", best != null ? NametagManager.getColorInfo(best.getProbability()) : NametagManager.getColorInfo(probability))
+                .replace("{BEST_PROBABILITY_FULL}", best != null ? NametagManager.getColorInfoFull(best.getProbability()) : NametagManager.getColorInfoFull(probability))
+                .replace("{BEST_MODEL}", best != null ? config.getModelDisplayName(best.getModel()) : config.getModelDisplayName(modelName)));
+
         scheduler.runSync(() -> {
             for (UUID uuid : playersWithAlerts) {
                 Player player = Bukkit.getPlayer(uuid);
@@ -128,12 +133,24 @@ public class AlertManager {
         });
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, int vl) {
-        sendAlert(suspectName, probability, buffer, vl, null, new String[]{"unknown"}, CheckType.UNKNOWN);
+    public void sendAlert(String suspectName, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType) {
+        sendAlert(suspectName, probability, buffer, modelName, bestNames, checkType, null);
     }
 
-    public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName, String[] bestNames, CheckType checkType) {
-        String message = formatAlertMessage(suspectName, probability, buffer, vl, modelName, bestNames, checkType);
+    public void sendAlert(String suspectName, double probability, double buffer, int vl) {
+        sendAlert(suspectName, probability, buffer, vl, null);
+    }
+
+    public void sendAlert(String suspectName, double probability, double buffer, int vl, AIResponse best) {
+        sendAlert(suspectName, probability, buffer, vl, null, new String[]{"unknown"}, CheckType.UNKNOWN, best);
+    }
+
+    public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName, String[] bestNames, CheckType checkType, AIResponse best) {
+        String message = ColorUtil.colorize(formatAlertMessage(suspectName, probability, buffer, vl, modelName, bestNames, checkType)
+                .replace("{BEST_PROBABILITY}", best != null ? NametagManager.getColorInfo(best.getProbability()) : NametagManager.getColorInfo(probability))
+                .replace("{BEST_PROBABILITY_FULL}", best != null ? NametagManager.getColorInfoFull(best.getProbability()) : NametagManager.getColorInfoFull(probability))
+                .replace("{BEST_MODEL}", best != null ? config.getModelDisplayName(best.getModel()) : config.getModelDisplayName(modelName)));
+
         scheduler.runSync(() -> {
             for (UUID uuid : playersWithAlerts) {
                 Player player = Bukkit.getPlayer(uuid);

@@ -3,7 +3,6 @@ package wtf.walrus.rotationloader;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.protocol.player.User;
 import com.github.retrooper.packetevents.protocol.world.Location;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityAnimation;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -11,18 +10,21 @@ import org.jetbrains.annotations.Nullable;
 import wtf.walrus.Main;
 import wtf.walrus.data.TickData;
 import wtf.walrus.hologram.NametagManager;
-import wtf.walrus.ml.MLOut;
-import wtf.walrus.ml.Model;
+import wtf.walrus.ml.client.LocalAIClient;
 import wtf.walrus.npc.NPC;
-import wtf.walrus.player.WalrusPlayer;
+import wtf.walrus.server.AIClientProvider;
+import wtf.walrus.server.FlatBufferSerializer;
+import wtf.walrus.server.IAIClient;
 import wtf.walrus.util.ColorUtil;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 public class RotationSession {
     private static final Map<UUID, List<RotationSession>> sessions = new ConcurrentHashMap<>();
     private static final ExecutorService ASYNC_EXECUTOR = Executors.newCachedThreadPool();
+    private static final Random RANDOM = new Random();
 
     private static final double[] CRIT_Y_OFFSETS = {
             0.42, 0.753, 1.001, 1.166, 1.249, 1.252,
@@ -34,6 +36,7 @@ public class RotationSession {
     private final int entityId;
     private final List<TickData> ticks;
     private final boolean crits;
+    private final String npcName;
     private NPC current = null;
     private BukkitRunnable currentTask = null;
     private int rotationCount = 0;
@@ -54,6 +57,22 @@ public class RotationSession {
         this.entityId = entityId;
         this.ticks = ticks;
         this.crits = crits;
+        this.npcName = generateNPCName();
+    }
+
+    public RotationSession(String name, String fileName, UUID uuid, int entityId, List<TickData> ticks, boolean crits, Set<String> modelIds) {
+        this.name = name;
+        this.fileName = fileName;
+        this.uuid = uuid;
+        this.entityId = entityId;
+        this.ticks = ticks;
+        this.crits = crits;
+        this.npcName = generateNPCName();
+    }
+
+    private String generateNPCName() {
+        int randomNum = 1000 + RANDOM.nextInt(9000);
+        return "игрок_" + randomNum;
     }
 
     private void stopInternal(@Nullable User user) {
@@ -93,7 +112,7 @@ public class RotationSession {
     public void load(User user, Location location) {
         stop(user);
 
-        NPC npc = new NPC(entityId, uuid, name, location);
+        NPC npc = new NPC(entityId, uuid, npcName, location);
         npc.spawn(user);
         this.current = npc;
 
@@ -163,28 +182,47 @@ public class RotationSession {
 
                         ASYNC_EXECUTOR.submit(() -> {
                             try {
-                                Model model = Main.instance.getLocalAIClientProvider().getModel();
-                                if (model == null) return;
+                                AIClientProvider clientProvider = Main.instance.getAiClientProvider();
+                                IAIClient client = clientProvider.get();
+                                if (client == null) return;
 
-                                MLOut out = model.predict(toPredict);
-                                if (out == null) return;
+                                if (client instanceof LocalAIClient) {
+                                    var model = Main.instance.getLocalAIClientProvider().getModel();
+                                    if (model == null) return;
 
-                                double prob = out.prob();
-                                synchronized (RotationSession.this) {
-                                    predictionsCount++;
-                                    sum += prob;
-                                    if (prob < min) min = prob;
-                                    if (prob > max) max = prob;
+                                    var out = model.predict(toPredict);
+                                    if (out == null) return;
+
+                                    handlePredictionResult(user, out.prob(), "local");
+                                } else {
+                                    Set<String> models = Main.instance.getPluginConfig().getModelNames().keySet()
+                                            .stream()
+                                            .filter(modelId -> Main.instance.getPluginConfig().isDisabledModel(modelId) || Main.instance.getPluginConfig().isOnlyAlertForModel(modelId))
+                                            .collect(Collectors.toSet());
+
+                                    if (models.isEmpty()) return;
+                                    byte[] serialized = FlatBufferSerializer.serialize(toPredict);
+
+                                    client.predict(serialized, uuid.toString(), npcName, models.stream().toList(), Main.instance.getPluginConfig().getModelsOnlyAlert())
+                                            .subscribe(
+                                                    response -> {
+                                                        synchronized (RotationSession.this) {
+                                                            if (response != null && response.getProbability() >= 0) {
+                                                                handlePredictionResult(user, response.getProbability(), response.getModel());
+                                                            }
+
+                                                        }
+                                                    },
+                                                    error -> {
+                                                        synchronized (RotationSession.this) {
+                                                            Main.instance.getLogger().warning("[RotationSession] Error: " + error.getMessage());
+                                                        }
+                                                    }
+                                            );
                                 }
-
-                                final int checkNum = predictionsCount;
-                                String color = NametagManager.getInfoColor(prob);
-                                final String finalProb = ColorUtil.colorize(color) + prob;
-                                Bukkit.getScheduler().runTask(Main.instance, () ->
-                                        user.sendMessage(String.format("[%s] Check #%d: prob=%s", fileName, checkNum, finalProb))
-                                );
                             } catch (Exception e) {
                                 Main.instance.getLogger().warning("[RotationSession] ML error: " + e.getMessage());
+                                e.printStackTrace();
                             }
                         });
                     }
@@ -192,6 +230,24 @@ public class RotationSession {
             }
         };
         currentTask.runTaskTimer(Main.instance, 1L, 1L);
+    }
+
+    private void handlePredictionResult(User user, double prob, String modelName) {
+        synchronized (RotationSession.this) {
+            predictionsCount++;
+            sum += prob;
+            if (prob < min) min = prob;
+            if (prob > max) max = prob;
+        }
+
+        final int checkNum = predictionsCount;
+        String color = NametagManager.getInfoColor(prob);
+        final String finalProb = ColorUtil.colorize(color) + String.format("%.6f", prob);
+        final String modelDisplay = (modelName != null && !modelName.isEmpty()) ? " §7[" + modelName + "§7]" : "";
+
+        Bukkit.getScheduler().runTask(Main.instance, () ->
+                user.sendMessage(String.format("[%s] Check #%d: prob=%s%s", fileName, checkNum, finalProb, modelDisplay))
+        );
     }
 
     public void stop(User user) {
@@ -249,4 +305,5 @@ public class RotationSession {
     public UUID getUuid() { return uuid; }
     public List<TickData> getTicks() { return ticks; }
     public boolean isCrits() { return crits; }
+    public String getNPCName() { return npcName; }
 }

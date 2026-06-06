@@ -23,6 +23,7 @@
 
 package wtf.walrus.server;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public interface IAIClient {
@@ -32,7 +33,7 @@ public interface IAIClient {
 
     CompletableFuture<Void> disconnect();
 
-    io.reactivex.rxjava3.core.Observable<AIResponse> predict(byte[] playerData, String playerUuid, String playerName);
+    io.reactivex.rxjava3.core.Observable<AIResponse> predict(byte[] playerData, String playerUuid, String playerName, List<String> disabledModels, List<String> oaModels);
 
     boolean isConnected();
 

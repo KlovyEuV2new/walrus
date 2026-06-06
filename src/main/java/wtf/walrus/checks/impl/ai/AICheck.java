@@ -33,6 +33,8 @@ import wtf.walrus.compat.WorldGuardCompat;
 import wtf.walrus.config.Config;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.TickData;
+import wtf.walrus.ml.MLOut;
+import wtf.walrus.ml.Model;
 import wtf.walrus.ml.client.LocalAIClient;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.scheduler.SchedulerAdapter;
@@ -46,9 +48,11 @@ import wtf.walrus.util.GeyserUtil;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class AICheck {
 
@@ -260,11 +264,21 @@ public class AICheck {
 
             } else {
                 byte[] serialized = FlatBufferSerializer.serialize(ticks);
-                client.predict(serialized, playerUuid.toString(), playerName)
+                Set<String> models = config.getModelNames().keySet()
+                        .stream()
+                        .filter(modelId -> config.isDisabledModel(modelId))
+                        .collect(Collectors.toSet());
+
+                client.predict(serialized, playerUuid.toString(), playerName, models.stream().toList(), config.getModelsOnlyAlert())
                         .subscribe(
-                                response -> schedulerAdapter.runSync(
-                                        () -> processResponse(playerUuid, playerName, data, response)),
-                                error -> handleError(playerName, data, error)
+                                response -> schedulerAdapter.runSync(() -> {
+                                    AIResponse best = new AIResponse(response.getOutb(), response.getError(), response.getModelb());
+                                    if (response.getModel() != null && !response.getModel().isEmpty()) {
+                                        processResponse(playerUuid, playerName, data, response, (best.getModelb() != null && !best.getModelb().isEmpty()) ? best : response);
+                                    }
+                                }),
+                                error -> {
+                                }
                         );
             }
         } catch (Exception e) {
@@ -276,6 +290,11 @@ public class AICheck {
 
     private void processResponse(UUID playerUuid, String playerName,
                                  AIPlayerData data, AIResponse response) {
+        processResponse(playerUuid,playerName, data, response, response);
+    }
+
+    private void processResponse(UUID playerUuid, String playerName,
+                                 AIPlayerData data, AIResponse response, AIResponse best) {
         if (response == null) return;
         schedulerAdapter.runSync(() -> {
             data.setPendingRequest(false);
@@ -307,9 +326,18 @@ public class AICheck {
                         + ", skipping buffer update");
             }
 
-            if (alertManager.shouldAlert(probability)) {
-                alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
-                        response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM);
+            boolean shouldAlert = alertManager.shouldAlert(probability), shouldBest = best != null && alertManager.shouldAlert(best.getProbability());
+            if (shouldAlert || shouldBest) {
+                if (shouldBest && !shouldAlert) {
+                    alertManager.sendAlert(playerName, best.getProbability(), data.getBuffer(), best.getModel(),
+                            best.getOutput().best() != null ? best.getOutput().best() : new String[]{}, CheckType.AIM, best);
+                } else if (best != null && !best.equals(response)) {
+                    alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
+                            response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM, best);
+                } else {
+                    alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
+                            response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM);
+                }
             }
 
             if (!isOnlyAlert && data.shouldFlag(config.getAiBufferFlag())) {

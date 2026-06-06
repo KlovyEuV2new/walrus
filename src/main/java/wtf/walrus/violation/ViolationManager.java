@@ -45,6 +45,7 @@ import wtf.walrus.penalty.PenaltyExecutor;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
+import wtf.walrus.server.AIResponse;
 import wtf.walrus.util.ColorUtil;
 import wtf.walrus.util.PlayerListFormatter;
 
@@ -240,7 +241,7 @@ public class ViolationManager {
         WalrusPlayer player = WalrusPlayer.get(data.getPlayerId());
         if (player == null) return;
 
-        List<TickData> ticks = data.getTicksLog();
+        List<TickData> ticks = data.getTicksLog(false);
         if (ticks.isEmpty()) return;
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -288,7 +289,7 @@ public class ViolationManager {
         WalrusPlayer player = WalrusPlayer.get(data.getPlayerId());
         if (player == null) return;
 
-        List<TickData> ticks = data.getTicksLog();
+        List<TickData> ticks = data.getTicksLog(false);
         if (ticks.isEmpty()) return;
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {

@@ -60,6 +60,8 @@ dependencies {
     testImplementation 'net.jqwik:jqwik:1.8.3'
     testImplementation 'org.mockito:mockito-core:5.10.0'
     testImplementation 'com.github.seeseemelk:MockBukkit-v1.16:1.5.2'
+
+    implementation 'org.java-websocket:Java-WebSocket:1.5.6'
 }
 
 dependencies {

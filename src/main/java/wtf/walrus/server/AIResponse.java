@@ -26,9 +26,9 @@ package wtf.walrus.server;
 import wtf.walrus.ml.MLOut;
 
 public class AIResponse {
-    private final MLOut output;
+    private final MLOut output, outb;
     private final String error;
-    private final String model;
+    private final String model, modelb;
 
     public AIResponse(MLOut out) {
         this(out, null, null);
@@ -39,9 +39,15 @@ public class AIResponse {
     }
 
     public AIResponse(MLOut out, String error, String model) {
+        this(out, error, model, null, null);
+    }
+
+    public AIResponse(MLOut out, String error, String model, MLOut outb, String modelb) {
         this.output = out;
+        this.outb = outb;
         this.error = error;
         this.model = model;
+        this.modelb = modelb;
     }
 
     public MLOut getOutput() {
@@ -153,5 +159,13 @@ public class AIResponse {
     public int hashCode() {
         long temp = Double.doubleToLongBits(output.prob());
         return (int) (temp ^ (temp >>> 32));
+    }
+
+    public String getModelb() {
+        return modelb;
+    }
+
+    public MLOut getOutb() {
+        return outb;
     }
 }

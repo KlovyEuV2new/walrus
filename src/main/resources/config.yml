@@ -90,16 +90,16 @@ detection:
   #   only-alert: When true, alerts are sent but NO punishments for this model
   models:
     fast:
-      name: "Fast-A1"
+      name: "Fast"
       only-alert: false   # Stable model - punishments enabled
     pro:
-      name: "Pro-A1"
+      name: "Pro"
       only-alert: true    # Newest model - testing mode - no punishments
     ultra:
-      name: "Ultra-A1"
+      name: "Ultra"
       only-alert: true    # Model in development - testing mode - no punishments
-    experimental:
-      name: "Experimental"
+    beta:
+      name: "Beta"
       only-alert: true    # Test model - testing mode - no punishments
     # local model display name (used when local-mode: true)
     local:

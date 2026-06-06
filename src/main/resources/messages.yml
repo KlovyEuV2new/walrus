@@ -2,7 +2,7 @@ prefix: "&#6A4EEEᴡᴀʟʀᴜs &f» &r"
 
 alerts-enabled: "&fОповещения &aвключены"
 alerts-disabled: "&fОповещения &cвыключены"
-alert-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAМодель: &f{MODEL} &f(&#85AEDB{TYPE}&f)"
+alert-format: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &f(&#997EFA{BEST_MODEL} &f: {BEST_PROBABILITY_FULL}&f) &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAМодель: &f{MODEL} &f(&#85AEDB{TYPE}&f)"
 default-alert-format: "&f{PLAYER} &7| &#997EFAБуфф: &f{BUFFER} &7| &#997EFAVL: &f{VL} &7| &#997EFAПроверка: &f{CHECK} &8{VERBOSE}"
 alert-format-vl: "&f{PLAYER} &7| &#997EFAВероятность: &f{PROBABILITY_FULL_COLORED} &7| &#997EFAБуфф: &f{BUFFER} &7| &cVL: {VL}"
 

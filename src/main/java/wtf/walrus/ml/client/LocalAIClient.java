@@ -82,7 +82,7 @@ public class LocalAIClient implements IAIClient {
     }
 
     @Override
-    public Observable<AIResponse> predict(byte[] playerData, String playerUuid, String playerName) {
+    public Observable<AIResponse> predict(byte[] playerData, String playerUuid, String playerName, List<String> disabledModels, List<String> oaModels) {
         return Observable.fromCallable(() -> {
             try {
                 ByteBuffer buf = ByteBuffer.wrap(playerData);

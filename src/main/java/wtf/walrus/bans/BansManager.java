@@ -289,8 +289,8 @@ public class BansManager {
 
             File fallbackFile = new File(fallbackFolder, fileName);
             if (!fallbackFile.exists()) {
-                plugin.getLogger().warning("[BanSystem] File not found: " + inputFile.getAbsolutePath());
-                plugin.getLogger().warning("[BanSystem] Also not found in fallback: " + fallbackFile.getAbsolutePath());
+                //plugin.getLogger().warning("[BanSystem] File not found: " + inputFile.getAbsolutePath());
+                //plugin.getLogger().warning("[BanSystem] Also not found in fallback: " + fallbackFile.getAbsolutePath());
                 return null;
             }
             inputFile = fallbackFile;

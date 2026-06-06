@@ -1,46 +1,35 @@
 /*
  * This file is part of MLSAC - AI powered Anti-Cheat
  * Copyright (C) 2026 MLSAC Team
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- *
- * This file contains code derived from:
- *   - SlothAC (© 2025 KaelusMC, https://github.com/KaelusMC/SlothAC)
- *   - Grim (© 2025 GrimAnticheat, https://github.com/GrimAnticheat/Grim)
- * All derived code is licensed under GPL-3.0.
  */
 
 package wtf.walrus.signalr;
 
+import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import wtf.walrus.ml.MLOut;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIResponse;
 import wtf.walrus.server.IAIClient;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.handshake.ServerHandshake;
+import java.net.URI;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class SignalRClient implements IAIClient {
-    private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final long INITIAL_BACKOFF_MS = 1000;
-    private static final int MAX_RECONNECT_ATTEMPTS = Integer.MAX_VALUE;
-    private static final long RECONNECT_INTERVAL_MS = 10000;
+
     private final JavaPlugin plugin;
     private final String serverAddress;
     private final String apiKey;
@@ -48,27 +37,35 @@ public class SignalRClient implements IAIClient {
     private final Logger logger;
     private final IntSupplier onlinePlayersSupplier;
     private final boolean debug;
-    private SignalRSessionManager sessionManager;
-    private SignalRReportStatsScheduler reportStatsScheduler;
-    private SignalRHeartbeatScheduler heartbeatScheduler;
-    private SignalREndpointConfig endpointConfig;
-    private String pluginHash;
+    private final Gson gson;
+    private final Map<String, CompletableFuture<Map<String, Object>>> pendingRequests;
+
+    private WebSocketClient webSocket;
+    private String sessionId;
     private volatile boolean connected = false;
-    private volatile boolean autoReconnectEnabled = true;
     private volatile boolean shuttingDown = false;
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
-    private final AtomicInteger autoReconnectAttempts = new AtomicInteger(0);
-    private volatile CompletableFuture<Boolean> connectionFuture = null;
+    private ScheduledTask heartbeatTask;
+    private ScheduledTask reportStatsTask;
+    private boolean limitExceeded = false;
+    private String baseUrl;
+    private CompletableFuture<Boolean> connectionFuture;
+
+    private final String sversion, version;
 
     public SignalRClient(JavaPlugin plugin, String serverAddress, String apiKey,
-            int reportStatsIntervalSeconds, IntSupplier onlinePlayersSupplier, boolean debug) {
+                         int reportStatsIntervalSeconds, IntSupplier onlinePlayersSupplier, boolean debug) {
         this.plugin = plugin;
         this.serverAddress = serverAddress;
         this.apiKey = apiKey;
         this.reportStatsIntervalSeconds = reportStatsIntervalSeconds;
         this.logger = plugin.getLogger();
         this.onlinePlayersSupplier = onlinePlayersSupplier;
+        this.version = plugin.getDescription().getVersion();
+        this.sversion = Bukkit.getVersion();
         this.debug = debug;
+        this.gson = new GsonBuilder().create();
+        this.pendingRequests = new ConcurrentHashMap<>();
     }
 
     public synchronized CompletableFuture<Boolean> connect() {
@@ -79,351 +76,279 @@ public class SignalRClient implements IAIClient {
             return connectionFuture;
         }
 
+        this.baseUrl = serverAddress.startsWith("ws") ? serverAddress : "ws://" + serverAddress.replace("http://", "").replace("https://", "");
+
         connectionFuture = CompletableFuture.supplyAsync(() -> {
             try {
-                if (pluginHash == null || pluginHash.isEmpty()) {
-                    this.pluginHash = PluginHashCalculator.calculatePluginHash(plugin);
-                }
-
-                if (pluginHash.isEmpty()) {
-                    logger.warning("[SignalR] Plugin hash calculation failed, using empty hash");
-                }
-
-                if (this.endpointConfig == null) {
-                    SignalREndpointConfigLoader configLoader = new SignalREndpointConfigLoader(logger);
-                    try {
-                        this.endpointConfig = configLoader.loadSync(serverAddress);
-                    } catch (Exception e) {
-                        logger.warning("[SignalR] Failed to load endpoint config, using defaults: " + e.getMessage());
-                        this.endpointConfig = SignalREndpointConfig.defaults();
+                URI uri = new URI(baseUrl);
+                webSocket = new WebSocketClient(uri) {
+                    @Override
+                    public void onOpen(ServerHandshake handshake) {
+                        logger.info("[WebSocket] Connected to " + baseUrl);
+                        Map<String, Object> connectMsg = new HashMap<>();
+                        connectMsg.put("type", "connect");
+                        connectMsg.put("playerCount", onlinePlayersSupplier.getAsInt());
+                        connectMsg.put("version", version);
+                        connectMsg.put("sversion", sversion);
+                        connectMsg.put("apiKey", apiKey);
+                        send(gson.toJson(connectMsg));
+                        sendStatsReport();
                     }
-                }
 
-                if (this.sessionManager == null) {
-                    String pluginVersion = plugin.getDescription().getVersion();
-                    this.sessionManager = new SignalRSessionManager(serverAddress, endpointConfig, logger, debug,
-                            pluginVersion);
-                    sessionManager.initialize();
-                    sessionManager.setOnDisconnectedCallback(this::handleDisconnection);
-                }
+                    @Override
+                    public void onMessage(String message) {
+                        handleMessage(message);
+                    }
 
-                if (sessionManager.getConnectionState() != com.microsoft.signalr.HubConnectionState.CONNECTED) {
-                    sessionManager.startConnection().join();
-                }
+                    @Override
+                    public void onClose(int code, String reason, boolean remote) {
+                        logger.warning("[WebSocket] Disconnected: " + reason);
+                        connected = false;
 
-                String sessionId = sessionManager.createSession(apiKey, pluginHash).join();
-                if (sessionId == null || sessionId.isEmpty()) {
-                    throw new RuntimeException("Failed to create session");
-                }
+                        if (heartbeatTask != null) {
+                            heartbeatTask.cancel();
+                            heartbeatTask = null;
+                        }
+                        if (reportStatsTask != null) {
+                            reportStatsTask.cancel();
+                            reportStatsTask = null;
+                        }
 
-                if (this.reportStatsScheduler == null) {
-                    this.reportStatsScheduler = new SignalRReportStatsScheduler(
-                            plugin, sessionManager, onlinePlayersSupplier);
-                    reportStatsScheduler.setOnLimitExceededCallback(
-                            () -> logger.warning("[SignalR] Online limit exceeded - Predict blocked"));
-                    reportStatsScheduler.setOnLimitClearedCallback(
-                            () -> logger.info("[SignalR] Online limit cleared - Predict enabled"));
-                    reportStatsScheduler.setOnSessionExpiredCallback(this::handleSessionExpired);
-                }
+                        if (!shuttingDown) {
+                            scheduleReconnect();
+                        }
+                    }
 
-                reportStatsScheduler.start(reportStatsIntervalSeconds);
+                    @Override
+                    public void onError(Exception ex) {
+                        logger.warning("[WebSocket] Error: " + ex.getMessage());
+                    }
+                };
 
-                if (this.heartbeatScheduler == null) {
-                    this.heartbeatScheduler = new SignalRHeartbeatScheduler(plugin, sessionManager);
-                    heartbeatScheduler.setOnSessionExpiredCallback(this::handleSessionExpired);
-                    heartbeatScheduler.setOnConnectionLostCallback(() -> {
-                        logger.warning("[SignalR] Heartbeat lost connection, forcing reconnect...");
-                        handleDisconnection(new RuntimeException("Heartbeat proactive check failed"));
-                    });
-                }
-
-                heartbeatScheduler.start();
-
-                connected = true;
-                reconnectAttempts.set(0);
-                autoReconnectAttempts.set(0);
-                logger.info("[SignalR] Connected to " + serverAddress);
+                webSocket.connectBlocking();
                 return true;
-            } catch (SignalRSessionManager.AuthenticationException e) {
-                logger.severe("[SignalR] Authentication failed: " + e.getMessage());
-                connected = false;
-                return false;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "[SignalR] Connection failed: " + e.getMessage());
+                logger.log(Level.SEVERE, "[WebSocket] Connection failed: " + e.getMessage());
                 connected = false;
                 return false;
             }
-        }, java.util.concurrent.ForkJoinPool.commonPool()); // Explicitly use ForkJoinPool to ensure async execution
+        });
 
         return connectionFuture;
     }
 
-    public CompletableFuture<Boolean> connectWithRetry() {
-        return connectWithRetry(0);
+    private void handleMessage(String message) {
+        try {
+            Map<String, Object> response = gson.fromJson(message, Map.class);
+            String status = (String) response.get("status");
+
+            if ("connected".equals(status)) {
+                this.sessionId = (String) response.get("sessionId");
+                connected = true;
+                reconnectAttempts.set(0);
+                sendStatsReport();
+                startHeartbeat();
+                startReportStats();
+                logger.info("[WebSocket] Session created: " + sessionId);
+            } else if ("success".equals(status) && response.containsKey("probability")) {
+                double probability = ((Number) response.get("probability")).doubleValue();
+                String requestId = (String) response.get("requestId");
+
+                CompletableFuture<Map<String, Object>> future = pendingRequests.remove(requestId);
+                if (future != null) {
+                    future.complete(response);
+                }
+            } else if ("error".equals(status)) {
+                String requestId = (String) response.get("requestId");
+                String errorMsg = (String) response.get("message");
+
+                if (requestId != null) {
+                    CompletableFuture<Map<String, Object>> future = pendingRequests.remove(requestId);
+                    if (future != null) {
+                        future.completeExceptionally(new RuntimeException(errorMsg));
+                    }
+                }
+                logger.warning("[WebSocket] Error: " + errorMsg);
+            }
+//            else if ("ping-out".equals(status)) {
+//            }
+        } catch (Exception e) {
+            logger.warning("[WebSocket] Failed to parse message: " + e.getMessage()
+                    + " | Raw message: " + message
+                    + " | Exception: " + e.getClass().getName());
+            logger.log(Level.WARNING, "[WebSocket] Stack trace:", e);
+        }
     }
 
-    private CompletableFuture<Boolean> connectWithRetry(int attempt) {
-        if (shuttingDown) {
-            return CompletableFuture.completedFuture(false);
-        }
-        if (attempt >= MAX_RETRY_ATTEMPTS) {
-            logger.severe("[SignalR] Max retry attempts reached, giving up");
-            return CompletableFuture.completedFuture(false);
-        }
-        return connect().thenCompose(success -> {
-            if (success) {
-                return CompletableFuture.completedFuture(true);
-            }
-            long backoffMs = calculateBackoff(attempt);
-            logger.info("[SignalR] Retrying connection in " + backoffMs + "ms (attempt " +
-                    (attempt + 1) + "/" + MAX_RETRY_ATTEMPTS + ")");
-            CompletableFuture<Boolean> future = new CompletableFuture<>();
-            SchedulerManager.getAdapter().runAsyncDelayed(() -> {
-                connectWithRetry(attempt + 1).thenAccept(future::complete);
-            }, backoffMs / 50);
-            return future;
+    private void sendStatsReport() {
+
+        SchedulerManager.getAdapter().runAsync(() -> {
+            if (!connected || shuttingDown || webSocket == null) return;
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", "stats");
+            msg.put("playerCount", onlinePlayersSupplier.getAsInt());
+            msg.put("version", version);
+            msg.put("sversion", sversion);
+            msg.put("requestId", UUID.randomUUID().toString());
+
+            webSocket.send(gson.toJson(msg));
         });
     }
 
-    public static long calculateBackoff(int attempt) {
-        return INITIAL_BACKOFF_MS * (1L << attempt);
+    private void startReportStats() {
+        if (reportStatsTask != null) reportStatsTask.cancel();
+
+        long intervalTicks = reportStatsIntervalSeconds * 20L;
+        reportStatsTask = SchedulerManager.getAdapter().runAsyncRepeating(() -> {
+            if (!connected || shuttingDown || webSocket == null) return;
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", "stats");
+            msg.put("playerCount", onlinePlayersSupplier.getAsInt());
+            msg.put("version", version);
+            msg.put("sversion", sversion);
+            msg.put("requestId", UUID.randomUUID().toString());
+
+            webSocket.send(gson.toJson(msg));
+        }, intervalTicks, intervalTicks);
+    }
+
+    private void startHeartbeat() {
+        if (heartbeatTask != null) {
+            heartbeatTask.cancel();
+        }
+
+        heartbeatTask = SchedulerManager.getAdapter().runAsyncRepeating(() -> {
+            if (!connected || shuttingDown || webSocket == null) return;
+
+            Map<String, Object> heartbeat = new HashMap<>();
+            heartbeat.put("type", "ping");
+            heartbeat.put("requestId", UUID.randomUUID().toString());
+
+            webSocket.send(gson.toJson(heartbeat));
+        }, 20L, 20L);
+    }
+
+    private void scheduleReconnect() {
+        int attempt = reconnectAttempts.incrementAndGet();
+        if (attempt > MAX_RETRY_ATTEMPTS) {
+            logger.severe("[WebSocket] Max retry attempts reached, giving up");
+            return;
+        }
+
+        long delayMs = INITIAL_BACKOFF_MS * (1L << (attempt - 1));
+        long delayTicks = delayMs / 50;
+
+        logger.info("[WebSocket] Retrying connection in " + delayMs + "ms (attempt " + attempt + "/" + MAX_RETRY_ATTEMPTS + ")");
+
+        SchedulerManager.getAdapter().runAsyncDelayed(() -> {
+            connect().thenAccept(success -> {
+                //if (!success) scheduleReconnect();
+            });
+        }, delayTicks);
     }
 
     public CompletableFuture<Void> disconnect() {
         shuttingDown = true;
-        autoReconnectEnabled = false;
-        ScheduledTask task = reconnectTask.getAndSet(null);
-        if (task != null) {
-            task.cancel();
-        }
-        return CompletableFuture.runAsync(() -> {
-            try {
-                if (heartbeatScheduler != null) {
-                    heartbeatScheduler.stop();
-                }
-                if (reportStatsScheduler != null) {
-                    reportStatsScheduler.stop();
-                }
-                if (sessionManager != null) {
-                    try {
-                        sessionManager.closeSession().get(SHUTDOWN_TIMEOUT_SECONDS,
-                                java.util.concurrent.TimeUnit.SECONDS);
-                    } catch (Exception e) {
-                        logger.warning("[SignalR] Error closing session: " + e.getMessage());
-                    }
-                }
-                connected = false;
-                logger.info("[SignalR] Disconnected from server");
-            } catch (Exception e) {
-                logger.log(Level.WARNING, "[SignalR] Error during disconnect", e);
-            }
-        });
-    }
 
-    private void handleDisconnection(Throwable exception) {
+        if (heartbeatTask != null) {
+            heartbeatTask.cancel();
+        }
+        if (reportStatsTask != null) {
+            reportStatsTask.cancel();
+        }
+
+        for (CompletableFuture<Map<String, Object>> future : pendingRequests.values()) {
+            future.completeExceptionally(new RuntimeException("Disconnected"));
+        }
+        pendingRequests.clear();
+
+        if (webSocket != null) {
+            webSocket.close();
+        }
+
         connected = false;
-        if (shuttingDown || !autoReconnectEnabled) {
-            return;
-        }
-        if (exception != null) {
-            logger.warning("[SignalR] Connection lost: " + exception.getMessage());
-        } else {
-            logger.warning("[SignalR] Connection lost unexpectedly");
-        }
-        if (reportStatsScheduler != null) {
-            reportStatsScheduler.stop();
-        }
-        if (heartbeatScheduler != null) {
-            heartbeatScheduler.stop();
-        }
-        scheduleReconnect();
+        logger.info("[WebSocket] Disconnected");
+        return CompletableFuture.completedFuture(null);
     }
 
-    private void handleSessionExpired() {
-        if (shuttingDown || !autoReconnectEnabled) {
-            return;
-        }
-        logger.info("[SignalR] Re-authenticating session...");
-        SchedulerManager.getAdapter().runAsync(() -> {
-            try {
-                String newSessionId = sessionManager.createSession(apiKey, pluginHash).join();
-                if (newSessionId != null && !newSessionId.isEmpty()) {
-                    logger.info("[SignalR] Session re-authenticated successfully");
-                } else {
-                    logger.warning("[SignalR] Session re-authentication failed, scheduling reconnect");
-                    scheduleReconnect();
-                }
-            } catch (Exception e) {
-                logger.warning("[SignalR] Session re-authentication error: " + e.getMessage());
-                scheduleReconnect();
-            }
-        });
-    }
-
-    private final java.util.concurrent.atomic.AtomicReference<ScheduledTask> reconnectTask = new java.util.concurrent.atomic.AtomicReference<>();
-
-    private void scheduleReconnect() {
-        if (reconnectTask.get() != null) {
-            return;
-        }
-
-        int attempt = autoReconnectAttempts.incrementAndGet();
-        long delayMs = RECONNECT_INTERVAL_MS;
-        long delaySeconds = delayMs / 1000;
-
-        logger.info("[SignalR] Scheduling reconnect attempt " + attempt + " in " + delaySeconds + " seconds...");
-
-        long delayTicks = delayMs / 50;
-        reconnectTask.set(SchedulerManager.getAdapter().runAsyncDelayed(() -> {
-            reconnectTask.set(null);
-            attemptReconnect();
-        }, delayTicks));
-    }
-
-    private void attemptReconnect() {
-        if (shuttingDown || !autoReconnectEnabled) {
-            return;
-        }
-        if (connected) {
-            logger.info("[SignalR] Already connected, skipping reconnect");
-            autoReconnectAttempts.set(0);
-            return;
-        }
-        int attempt = autoReconnectAttempts.get();
-        logger.info("[SignalR] Attempting reconnect (" + attempt + "/" + MAX_RECONNECT_ATTEMPTS + ")...");
-        connect().thenAccept(success -> {
-            if (success) {
-                logger.info("[SignalR] Reconnected successfully after " + attempt + " attempt(s)");
-                autoReconnectAttempts.set(0);
-            } else {
-                logger.warning("[SignalR] Reconnect attempt " + attempt + " failed");
-                scheduleReconnect();
-            }
-        }).exceptionally(ex -> {
-            logger.warning("[SignalR] Reconnect attempt " + attempt + " failed: " + ex.getMessage());
-            scheduleReconnect();
-            return null;
-        });
-    }
-
-    public void setAutoReconnectEnabled(boolean enabled) {
-        this.autoReconnectEnabled = enabled;
-    }
-
-    public boolean isAutoReconnectEnabled() {
-        return autoReconnectEnabled;
-    }
-
-    public CompletableFuture<Boolean> reconnect() {
-        autoReconnectAttempts.set(0);
-        return disconnect().thenCompose(v -> {
-            shuttingDown = false;
-            autoReconnectEnabled = true;
-            return connect();
-        });
+    public CompletableFuture<Boolean> connectWithRetry() {
+        return connect();
     }
 
     @Override
-    public io.reactivex.rxjava3.core.Observable<AIResponse> predict(byte[] playerData, String playerUuid,
-            String playerName) {
+    public io.reactivex.rxjava3.core.Observable<AIResponse> predict(byte[] playerData, String playerUuid, String playerName, List<String> disabledModels, List<String> oaModels) {
         if (!isConnected()) {
-            return io.reactivex.rxjava3.core.Observable.error(
-                    new IllegalStateException("Not connected to SignalR server"));
+            return io.reactivex.rxjava3.core.Observable.error(new IllegalStateException("Not connected"));
         }
-        if (reportStatsScheduler != null && reportStatsScheduler.isLimitExceeded()) {
-            return io.reactivex.rxjava3.core.Observable.error(
-                    new IllegalStateException("Online limit exceeded, Predict blocked"));
+        if (limitExceeded) {
+            return io.reactivex.rxjava3.core.Observable.error(new IllegalStateException("Online limit exceeded"));
         }
-        return sessionManager.predict(playerData, playerUuid, playerName)
-                .concatMap(result -> {
-                    if (result.isSuccess()) {
-                        return io.reactivex.rxjava3.core.Observable.just(
-                                new AIResponse(new MLOut(result.getProbability(), new String[]{"unknown"}), null, result.getModel()));
-                    }
-                    String errorCode = result.getErrorCode();
-                    if (HubErrorParser.requiresReportStats(errorCode)) {
-                        if (debug) {
-                            logger.warning("[SignalR] Predict failed: " + errorCode + ", calling ReportStats...");
-                        }
-                        return handleStatsRequiredAndRetry(playerData, playerUuid, playerName);
-                    }
-                    if (HubErrorParser.LIMIT_EXCEEDED.equals(errorCode)) {
-                        if (debug) {
-                            logger.warning("[SignalR] Predict failed: Online limit exceeded");
-                        }
-                        if (reportStatsScheduler != null) {
-                            reportStatsScheduler.setLimitExceeded(true);
-                        }
-                        return io.reactivex.rxjava3.core.Observable.error(
-                                new RuntimeException("Online limit exceeded"));
-                    }
-                    if (HubErrorParser.NOT_AUTHENTICATED.equals(errorCode)) {
-                        if (debug) {
-                            logger.warning("[SignalR] Session expired during prediction, attempting reconnect");
-                        }
-                        return handleUnauthenticatedAndRetry(playerData, playerUuid, playerName);
-                    }
-                    return io.reactivex.rxjava3.core.Observable.error(
-                            new RuntimeException(errorCode + ": " + result.getErrorMessage()));
-                });
-    }
 
-    private io.reactivex.rxjava3.core.Observable<AIResponse> handleStatsRequiredAndRetry(byte[] playerData,
-            String playerUuid,
-            String playerName) {
-        if (reportStatsScheduler == null) {
-            return io.reactivex.rxjava3.core.Observable.error(
-                    new RuntimeException("ReportStats scheduler not initialized"));
-        }
-        // Convert CompletableFuture to Observable
-        return io.reactivex.rxjava3.core.Observable.fromFuture(reportStatsScheduler.reportNow())
-                .flatMap(statsResult -> {
-                    if (!statsResult.isSuccess()) {
-                        return io.reactivex.rxjava3.core.Observable.error(
-                                new RuntimeException("ReportStats failed: " + statsResult.getError()));
-                    }
-                    if (statsResult.isLimitExceeded()) {
-                        return io.reactivex.rxjava3.core.Observable.error(
-                                new RuntimeException("Online limit exceeded after ReportStats"));
-                    }
-                    return sessionManager.predict(playerData, playerUuid, playerName)
-                            .map(result -> {
-                                if (result.isSuccess()) {
-                                    return new AIResponse(new MLOut(result.getProbability(), new String[]{"unknown"}), null, result.getModel());
-                                }
-                                throw new RuntimeException(result.getErrorCode() + ": " + result.getErrorMessage());
-                            });
-                });
-    }
+        return io.reactivex.rxjava3.core.Observable.create(emitter -> {
+            try {
+                long a = System.currentTimeMillis();
 
-    private io.reactivex.rxjava3.core.Observable<AIResponse> handleUnauthenticatedAndRetry(byte[] playerData,
-            String playerUuid,
-            String playerName) {
-        return io.reactivex.rxjava3.core.Observable.fromFuture(sessionManager.createSession(apiKey, pluginHash))
-                .flatMap(sessionId -> {
-                    return sessionManager.predict(playerData, playerUuid, playerName)
-                            .map(result -> {
-                                if (result.isSuccess()) {
-                                    return new AIResponse(new MLOut(result.getProbability(), new String[]{"unknown"}), null, result.getModel());
-                                }
-                                throw new RuntimeException(result.getErrorCode() + ": " + result.getErrorMessage());
-                            });
-                });
+                String dataBase64 = Base64.getEncoder().encodeToString(playerData);
+                String requestId = UUID.randomUUID().toString();
+
+                CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
+                pendingRequests.put(requestId, future);
+
+                Map<String, Object> predictMsg = new HashMap<>();
+                predictMsg.put("type", "predict");
+                predictMsg.put("disabled", disabledModels);
+                predictMsg.put("only-alerts", oaModels);
+                predictMsg.put("data", dataBase64);
+                predictMsg.put("playerUuid", playerUuid);
+                predictMsg.put("playerName", playerName);
+                predictMsg.put("requestId", requestId);
+
+                webSocket.send(gson.toJson(predictMsg));
+
+                future.orTimeout(5, TimeUnit.SECONDS)
+                        .thenAccept(resp -> {
+                            long b = System.currentTimeMillis();
+                            logger.info(b - a + " ms");
+
+                            double probability = ((Number) resp.get("probability")).doubleValue();
+                            String verdict = (String) resp.get("verdict");
+                            String resolvedModelId = (String) resp.get("model");
+
+                            double probabilityb = ((Number) resp.get("probabilityb")).doubleValue();
+                            String modelb = (String) resp.get("modelb");
+
+                            emitter.onNext(new AIResponse(new MLOut(probability, new String[]{"unknown"}), verdict, resolvedModelId,
+                                    new MLOut(probabilityb, new String[]{"unknown"}), modelb));
+                            emitter.onComplete();
+                            pendingRequests.remove(requestId);
+                        })
+                        .exceptionally(ex -> {
+                            emitter.onError(ex);
+                            pendingRequests.remove(requestId);
+                            return null;
+                        });
+
+            } catch (Exception e) {
+                emitter.onError(e);
+            }
+        });
     }
 
     @Override
     public boolean isConnected() {
-        return connected && sessionManager != null && sessionManager.isSessionValid();
+        return connected && webSocket != null && webSocket.isOpen();
     }
 
     @Override
     public boolean isLimitExceeded() {
-        return reportStatsScheduler != null && reportStatsScheduler.isLimitExceeded();
+        return limitExceeded;
     }
 
     @Override
     public String getSessionId() {
-        return sessionManager != null ? sessionManager.getSessionId() : null;
+        return sessionId;
     }
 
     @Override
@@ -431,7 +356,11 @@ public class SignalRClient implements IAIClient {
         return serverAddress;
     }
 
-    public SignalREndpointConfig getEndpointConfig() {
-        return endpointConfig;
+    public String getSversion() {
+        return sversion;
+    }
+
+    public String getVersion() {
+        return version;
     }
 }

@@ -37,7 +37,14 @@ public class AnalyticsClient {
     private final Map<String, AnalyticsResult> cache = new ConcurrentHashMap<>();
 
     public AnalyticsClient(String baseUrl, Logger logger) {
-        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String normalizedUrl = baseUrl;
+        if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
+            normalizedUrl = "http://" + normalizedUrl;
+        }
+        if (normalizedUrl.endsWith("/")) {
+            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
+        }
+        this.baseUrl = normalizedUrl;
         this.logger = logger;
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(5, TimeUnit.SECONDS)
