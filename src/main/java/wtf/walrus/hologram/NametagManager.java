@@ -548,8 +548,10 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                             Optional.of(component)));
             metadata.add(new EntityData<Boolean>(
                     3, EntityDataTypes.BOOLEAN, true));
-            metadata.add(new EntityData<Byte>(
-                    15, EntityDataTypes.BYTE, (byte) 0x10));
+
+            if (version < 770) {
+                metadata.add(new EntityData<Byte>(15, EntityDataTypes.BYTE, (byte) 0x10));
+            }
 
         } else if (version >= 393) {
             String json = AdventureSerializer.getGsonSerializer()

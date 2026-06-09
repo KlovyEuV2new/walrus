@@ -31,7 +31,7 @@ import wtf.walrus.checks.CheckType;
 import wtf.walrus.config.Config;
 import wtf.walrus.config.MessagesConfig;
 import wtf.walrus.hologram.NametagManager;
-import wtf.walrus.ml.impl.MLPModel;
+import wtf.walrus.ml.impl.GRUModel;
 import wtf.walrus.scheduler.SchedulerAdapter;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIResponse;
@@ -193,7 +193,7 @@ public class AlertManager {
         String checkTypeDisplay = checkType != null ? getTypeName(checkType) : getTypeName(CheckType.UNKNOWN);
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
-        int IN = MLPModel.IN;
+        int IN = GRUModel.IN;
         for (int i = 0; i < IN; i++) {
             String value = (i < bestNames.length) ? bestNames[i] : "unknown";
             template = template.replace("{BEST_" + i + "}", value)
@@ -219,7 +219,7 @@ public class AlertManager {
         String checkTypeDisplay = checkType != null ? getTypeName(checkType) : getTypeName(CheckType.UNKNOWN);
         template = template.replace("{MODEL}", modelDisplay).replace("<model>", modelDisplay)
                 .replace("{TYPE}", checkTypeDisplay).replace("<type>", checkTypeDisplay);
-        int IN = MLPModel.IN;
+        int IN = GRUModel.IN;
         for (int i = 0; i < IN; i++) {
             String value = (i < bestNames.length) ? bestNames[i] : "unknown";
             template = template.replace("{BEST_" + i + "}", value)
