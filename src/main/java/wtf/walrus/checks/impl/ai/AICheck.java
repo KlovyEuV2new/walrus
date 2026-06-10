@@ -330,13 +330,13 @@ public class AICheck {
             if (shouldAlert || shouldBest) {
                 if (shouldBest && !shouldAlert) {
                     alertManager.sendAlert(playerName, best.getProbability(), data.getBuffer(), best.getModel(),
-                            best.getOutput().best() != null ? best.getOutput().best() : new String[]{}, CheckType.AIM, best);
+                            best.getOutput() != null ? best.getOutput().best() : new String[]{}, CheckType.AIM, best);
                 } else if (best != null && !best.equals(response)) {
                     alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
-                            response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM, best);
+                            response.getOutput() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM, best);
                 } else {
                     alertManager.sendAlert(playerName, probability, data.getBuffer(), modelName,
-                            response.getOutput().best() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM);
+                            response.getOutput() != null ? response.getOutput().best() : new String[]{}, CheckType.AIM);
                 }
             }
 

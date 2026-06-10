@@ -22,15 +22,15 @@ public class GRUModel extends Model {
         IN = new GRUModel(null).extractFeaturesInternal(probe).size();
     }
 
-    private final int BATCH_SIZE = 32;
+    private final int BATCH_SIZE = 128;
 
     private static final double LR       = 0.0001;
     private static final double BETA1    = 0.9;
     private static final double BETA2    = 0.999;
     private static final double EPS      = 1e-8;
-    private static final double LAMBDA   = 1e-4;
-    private static final double FB_BETA  = 0.5;
-    private static final int    PATIENCE = 3;
+    private static final double LAMBDA   = 1e-5;
+    private static final double FB_BETA  = 1.0;
+    private static final int    PATIENCE = 5;
 
     private double[][] gruWrX = new double[TICK_IN][GRU_H];
     private double[][] gruWrH = new double[GRU_H][GRU_H];
