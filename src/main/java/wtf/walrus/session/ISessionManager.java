@@ -47,4 +47,6 @@ public interface ISessionManager {
     String getCurrentSessionFolder();
     void onAttack(Player player, DataType dataType);
     void onTick(Player player, float yaw, float pitch);
+    void onDisable();
+    void onJoin(Player player);
 }

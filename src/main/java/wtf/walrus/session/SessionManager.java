@@ -32,14 +32,13 @@ import wtf.walrus.util.AimProcessor;
 
 import javax.xml.crypto.Data;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 public class SessionManager implements ISessionManager {
+
+    private final List<SavedSession> reloadSessions;
 
     private final Map<UUID, DataSession> activeAimSessions;
     private final Map<UUID, AimProcessor> playerAimProcessors;
@@ -48,6 +47,7 @@ public class SessionManager implements ISessionManager {
 
     public SessionManager(Main plugin) {
         this.activeAimSessions = new ConcurrentHashMap<>();
+        this.reloadSessions = plugin.getDataConfig().get();
         this.playerAimProcessors = new ConcurrentHashMap<>();
         this.plugin = plugin;
     }
@@ -110,6 +110,38 @@ public class SessionManager implements ISessionManager {
                         "Failed to save aim session for " + aimSession.getPlayerName(), e);
             }
         }
+    }
+
+    public void onJoin(Player player) {
+        UUID uuid = player.getUniqueId();
+        SavedSession session = getSaved(uuid);
+
+        if (session != null) {
+            startSession(player, session.label(), session.comment(), session.type());
+            reloadSessions.remove(session);
+        }
+    }
+
+    public SavedSession getSaved(UUID uuid) {
+        for (SavedSession session : reloadSessions) if (session.uuid().equals(uuid)) return session;
+        return null;
+    }
+
+    public void onDisable() {
+        reloadSessions.clear();
+
+        for (DataSession session : activeAimSessions.values()) {
+            reloadSessions.add(new SavedSession(
+                    session.getUuid(),
+                    session.getLabel(),
+                    session.getComment(),
+                    session.getDataType()
+            ));
+        }
+
+        plugin.getLogger().info("Saving sessions: " + reloadSessions.size());
+        plugin.getDataConfig().set(reloadSessions);
+        stopAllSessions();
     }
 
     @Override

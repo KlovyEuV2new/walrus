@@ -36,6 +36,7 @@ public class RotationSession {
     private final int entityId;
     private final List<TickData> ticks;
     private final boolean crits;
+    private final boolean follow;
     private final String npcName;
     private NPC current = null;
     private BukkitRunnable currentTask = null;
@@ -48,7 +49,10 @@ public class RotationSession {
 
     private int critPhase = -1;
     private int critCooldown = 0;
-    private static final int CRIT_INTERVAL = 13;
+    private static final int CRIT_INTERVAL = 11;
+
+    private double velX = 0;
+    private double velZ = 0;
 
     public RotationSession(String name, String fileName, UUID uuid, int entityId, List<TickData> ticks, boolean crits) {
         this.name = name;
@@ -57,6 +61,18 @@ public class RotationSession {
         this.entityId = entityId;
         this.ticks = ticks;
         this.crits = crits;
+        this.follow = false;
+        this.npcName = generateNPCName();
+    }
+
+    public RotationSession(String name, String fileName, UUID uuid, int entityId, List<TickData> ticks, boolean crits, boolean follow) {
+        this.name = name;
+        this.fileName = fileName;
+        this.uuid = uuid;
+        this.entityId = entityId;
+        this.ticks = ticks;
+        this.crits = crits;
+        this.follow = follow;
         this.npcName = generateNPCName();
     }
 
@@ -67,6 +83,7 @@ public class RotationSession {
         this.entityId = entityId;
         this.ticks = ticks;
         this.crits = crits;
+        this.follow = false;
         this.npcName = generateNPCName();
     }
 
@@ -126,6 +143,8 @@ public class RotationSession {
         rotationBuffer.clear();
         critPhase = -1;
         critCooldown = 0;
+        velX = 0;
+        velZ = 0;
 
         final int[] tickIndex = {-1};
         final Location[] currentLocation = {location};
@@ -149,6 +168,70 @@ public class RotationSession {
                 tickIndex[0] = nextIndex;
                 TickData tick = ticks.get(nextIndex);
                 if (tick == null) return;
+
+                if (follow) {
+                    Player target = Bukkit.getPlayer(user.getUUID());
+                    if (target != null) {
+                        Location npcLoc = currentLocation[0];
+                        org.bukkit.Location targetLoc = target.getLocation();
+
+                        double dx = targetLoc.getX() - npcLoc.getX();
+                        double dz = targetLoc.getZ() - npcLoc.getZ();
+                        double dist = Math.sqrt(dx * dx + dz * dz);
+
+                        if (dist > 2.5) {
+                            double speed = 0.22;
+                            double friction = 0.91;
+
+                            double dirX = dx / dist;
+                            double dirZ = dz / dist;
+
+                            velX += dirX * speed;
+                            velZ += dirZ * speed;
+
+                            double currentSpeed = Math.sqrt(velX * velX + velZ * velZ);
+                            double maxSpeed = 0.35;
+                            if (currentSpeed > maxSpeed) {
+                                velX = (velX / currentSpeed) * maxSpeed;
+                                velZ = (velZ / currentSpeed) * maxSpeed;
+                            }
+
+                            velX *= friction;
+                            velZ *= friction;
+
+                            double newX = npcLoc.getX() + velX;
+                            double newZ = npcLoc.getZ() + velZ;
+                            double newY = targetLoc.getY();
+
+                            float yawToTarget = (float) (Math.toDegrees(Math.atan2(-dx, dz)));
+
+                            double eyeY = npcLoc.getY() + 1.62;
+                            double targetEyeY = targetLoc.getY() + 1.62;
+                            double dyEye = targetEyeY - eyeY;
+                            double distEye = Math.sqrt(dx * dx + dz * dz);
+                            float pitchToTarget = (float) (-Math.toDegrees(Math.atan2(dyEye, distEye)));
+
+                            Location newLoc = new Location(newX, newY, newZ, yawToTarget, pitchToTarget);
+                            npc.teleport(user, newLoc);
+                            currentLocation[0] = newLoc;
+                        } else {
+                            velX *= 0.6;
+                            velZ *= 0.6;
+
+                            float yawToTarget = (float) (Math.toDegrees(Math.atan2(-dx, dz)));
+
+                            double eyeY = npcLoc.getY() + 1.62;
+                            double targetEyeY = targetLoc.getY() + 1.62;
+                            double dyEye = targetEyeY - eyeY;
+                            double distEye = Math.sqrt(dx * dx + dz * dz);
+                            float pitchToTarget = (float) (-Math.toDegrees(Math.atan2(dyEye, distEye)));
+
+                            Location newLoc = new Location(npcLoc.getX(), npcLoc.getY(), npcLoc.getZ(), yawToTarget, pitchToTarget);
+                            npc.teleport(user, newLoc);
+                            currentLocation[0] = newLoc;
+                        }
+                    }
+                }
 
                 npc.rotate(user, tick.deltaYaw, tick.deltaPitch);
                 rotationCount++;
@@ -210,7 +293,6 @@ public class RotationSession {
                                                             if (response != null && response.getProbability() >= 0) {
                                                                 handlePredictionResult(user, response.getProbability(), response.getModel());
                                                             }
-
                                                         }
                                                     },
                                                     error -> {
@@ -305,5 +387,6 @@ public class RotationSession {
     public UUID getUuid() { return uuid; }
     public List<TickData> getTicks() { return ticks; }
     public boolean isCrits() { return crits; }
+    public boolean isFollow() { return follow; }
     public String getNPCName() { return npcName; }
 }

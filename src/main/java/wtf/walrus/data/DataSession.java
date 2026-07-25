@@ -64,7 +64,7 @@ public class DataSession {
         lock.writeLock().lock();
         try {
             TickData tickData = aimProcessor.process(yaw, pitch);
-            if (ticksSinceAttack < COMBAT_TIMEOUT) {
+            if (ticksSinceAttack < COMBAT_TIMEOUT || dataType.equals(DataType.ALL)) {
                 recordedTicks.add(tickData);
             }
             ticksSinceAttack++;

@@ -88,4 +88,12 @@ public class NoOpSessionManager implements ISessionManager {
     @Override
     public void onTick(Player player, float yaw, float pitch) {
     }
+
+    @Override
+    public void onDisable() {
+    }
+
+    @Override
+    public void onJoin(Player player) {
+    }
 }

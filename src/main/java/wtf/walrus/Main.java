@@ -36,6 +36,7 @@ import wtf.walrus.ml.client.LocalAIClientProvider;
 import wtf.walrus.ml.managers.TrainingDataManager;
 import wtf.walrus.ml.managers.VerdictManager;
 import wtf.walrus.npc.NPC;
+import wtf.walrus.placeholderapi.Placeholder;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.punishment.PunishmentManager;
 import wtf.walrus.rotationloader.RotationSession;
@@ -52,7 +53,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 public final class Main extends JavaPlugin {
 
@@ -90,6 +90,8 @@ public final class Main extends JavaPlugin {
 
     private LocalAIClientProvider localAIClientProvider;
 
+    private DataConfig dataConfig;
+
     private CheckManagerListener checkManagerListener;
 
     private PunishmentsConfig punishmentsConfig;
@@ -103,6 +105,7 @@ public final class Main extends JavaPlugin {
     private BansMenuConfig bansMenuConfig;
 
     private boolean litebansapi;
+    private Placeholder placeholder;
 
     @Override
     public void onLoad() {
@@ -123,7 +126,6 @@ public final class Main extends JavaPlugin {
         instance = this;
 
         litebansapi = Bukkit.getPluginManager().getPlugin("LiteBans") != null;
-
         TrainingDataManager.putDefaultModel(this, getDataFolder());
 
         try {
@@ -167,6 +169,7 @@ public final class Main extends JavaPlugin {
         }
 
         this.featureCalculator = new FeatureCalculator();
+        this.dataConfig = new DataConfig(this);
         this.sessionManager = DataCollectorFactory.createSessionManager(this);
 
         this.localAIClientProvider = new LocalAIClientProvider(getDataFolder(), getLogger());
@@ -254,6 +257,9 @@ public final class Main extends JavaPlugin {
         PacketEvents.getAPI().getEventManager().registerListener(digListener);
         PacketEvents.getAPI().getEventManager().registerListener(rotationListener);
 
+        if (this.getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            this.placeholder = new Placeholder();
+        }
         this.commandHandler = new CommandHandler(sessionManager, alertManager, aiCheck, miningCheck, this);
         PluginCommand command = getCommand("walrus");
         if (command != null) {
@@ -272,7 +278,6 @@ public final class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         RotationSession.stopAll();
-        commandHandler.handleStopAll(Bukkit.getConsoleSender());
         if (localAIClientProvider != null) {
             getLogger().info("[LocalML] Saving local model state...");
             localAIClientProvider.saveModels();
@@ -283,7 +288,7 @@ public final class Main extends JavaPlugin {
 
         if (sessionManager != null) {
             getLogger().info("Stopping all active sessions...");
-            sessionManager.stopAllSessions();
+            sessionManager.onDisable();
         }
 
         if (aiCheck != null) aiCheck.clearAll();
@@ -449,4 +454,12 @@ public final class Main extends JavaPlugin {
     }
 
     public BansMenuConfig getBansMenuConfig() { return bansMenuConfig; }
+
+    public Placeholder getPlaceholder() {
+        return placeholder;
+    }
+
+    public DataConfig getDataConfig() {
+        return dataConfig;
+    }
 }

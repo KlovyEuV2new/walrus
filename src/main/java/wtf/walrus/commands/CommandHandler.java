@@ -148,7 +148,9 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
 
     private boolean handlePlayRot(CommandSender sender, String[] args) {
         boolean crits = Arrays.stream(args)
-                .anyMatch(arg -> arg.equalsIgnoreCase("-c"));
+                .anyMatch(arg -> arg.equalsIgnoreCase("-c")),
+                follow = Arrays.stream(args)
+                        .anyMatch(arg -> arg.equalsIgnoreCase("-f"));
 
         String file = args[1];
         if (!sender.hasPermission(Permissions.PLAY_ROTATION) && !sender.hasPermission(Permissions.ADMIN)) {
@@ -184,7 +186,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         } catch (IOException ignored) {}
 
         if (ticks != null && !ticks.isEmpty()) {
-            RotationSession session = new RotationSession(user.getName(), file, user.getUUID(), ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), ticks, crits);
+            RotationSession session = new RotationSession(user.getName(), file, user.getUUID(), ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), ticks, crits, follow);
             Location location = new Location(player.position.x, player.position.y, player.position.z, player.yaw, player.pitch);
             session.load(user, location);
             return true;

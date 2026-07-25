@@ -46,7 +46,7 @@ import wtf.walrus.util.ColorUtil;
 import wtf.walrus.violation.ViolationManager;
 
 public class PlayerListener implements Listener {
-    private final JavaPlugin plugin;
+    private final Main plugin;
     private final AICheck aiCheck;
     private final MiningCheck miningCheck;
     private final AlertManager alertManager;
@@ -57,7 +57,7 @@ public class PlayerListener implements Listener {
     private final AnalyticsClient analyticsClient;
     private HitListener hitListener;
 
-    public PlayerListener(JavaPlugin plugin, AICheck aiCheck, MiningCheck miningCheck, AlertManager alertManager,
+    public PlayerListener(Main plugin, AICheck aiCheck, MiningCheck miningCheck, AlertManager alertManager,
                           ViolationManager violationManager, SessionManager sessionManager,
                           TickListener tickListener, wtf.walrus.hologram.NametagManager nametagManager,
                           AnalyticsClient analyticsClient) {
@@ -85,6 +85,7 @@ public class PlayerListener implements Listener {
         if (tickListener != null) {
             tickListener.startPlayerTask(player);
         }
+        plugin.getSessionManager().onJoin(player);
 
         try {
             SchedulerManager.getAdapter().runSyncDelayed(() -> {

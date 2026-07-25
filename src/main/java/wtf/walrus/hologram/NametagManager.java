@@ -35,6 +35,7 @@ import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.ml.managers.VerdictManager;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
+import wtf.walrus.util.FastMath;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,7 +45,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
-import wtf.walrus.util.FastMath;
 
 public class NametagManager extends PacketListenerAbstract implements Listener {
 
@@ -466,7 +466,7 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
             }
 
             if (isNew || textChanged) {
-                List<EntityData<?>> metadata = getVersionedMetadata(viewer, lines[i]);
+                List<EntityData<?>> metadata = getVersionedMetadata(lines[i]);
                 WrapperPlayServerEntityMetadata metadataPacket =
                         new WrapperPlayServerEntityMetadata(entityIds[i], metadata);
                 PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
@@ -529,11 +529,15 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
         }
     }
 
-    private List<EntityData<?>> getVersionedMetadata(Player viewer, String text) {
+    /**
+     * PacketEvents serializes packets using the server protocol. Clients on another
+     * protocol are handled later by ViaVersion, so metadata must not be selected
+     * from the viewer's protocol version here.
+     */
+    private List<EntityData<?>> getVersionedMetadata(String text) {
         List<EntityData<?>> metadata = new ArrayList<>();
-        ClientVersion clientVersion = PacketEvents.getAPI()
-                .getPlayerManager().getClientVersion(viewer);
-        int version = clientVersion != null ? clientVersion.getProtocolVersion() : 770;
+        int version = PacketEvents.getAPI().getServerManager()
+                .getVersion().toClientVersion().getProtocolVersion();
 
         metadata.add(new EntityData<Byte>(
                 0, EntityDataTypes.BYTE, (byte) 0x20));
@@ -548,10 +552,6 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                             Optional.of(component)));
             metadata.add(new EntityData<Boolean>(
                     3, EntityDataTypes.BOOLEAN, true));
-
-            if (version < 770) {
-                metadata.add(new EntityData<Byte>(15, EntityDataTypes.BYTE, (byte) 0x10));
-            }
 
         } else if (version >= 393) {
             String json = AdventureSerializer.getGsonSerializer()
@@ -571,22 +571,20 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
                     3, EntityDataTypes.BOOLEAN, true));
         }
 
-        if (version < 766) {
-            int markerIndex = 15;
-            if (version < 755) {
-                if (version >= 448)
-                    markerIndex = 14;
-                else if (version >= 385)
-                    markerIndex = 12;
-                else if (version >= 107)
-                    markerIndex = 11;
-                else
-                    markerIndex = 10;
-            }
-            metadata.add(new EntityData<Byte>(
-                    markerIndex, EntityDataTypes.BYTE,
-                    (byte) 0x10));
+        int markerIndex = 15;
+        if (version < 755) {
+            if (version >= 448)
+                markerIndex = 14;
+            else if (version >= 385)
+                markerIndex = 12;
+            else if (version >= 107)
+                markerIndex = 11;
+            else
+                markerIndex = 10;
         }
+        metadata.add(new EntityData<Byte>(
+                markerIndex, EntityDataTypes.BYTE,
+                (byte) 0x10));
 
         return metadata;
     }
@@ -609,8 +607,12 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     }
 
     public static String getColorInfo(double val) {
+        return getColorInfo(val, 4);
+    }
+
+    public static String getColorInfo(double val, int decimalPlaces) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = FastMath.format(val, 4);
+        String fmt = FastMath.format(val, decimalPlaces);
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;
@@ -619,14 +621,16 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
     }
 
     public static String getColorInfoFull(double val) {
+        return getColorInfoFull(val, 4);
+    }
+
+    public static String getColorInfoFull(double val, int decimalPlaces) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = FastMath.format(val, 4);
-        if (val < 0.0001) return holo.getColorLow()       + val;
+        String fmt = FastMath.format(val, decimalPlaces);
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;
         if (val < 0.9) return holo.getColorCritical()  + fmt;
-        if (val > 0.9999) return holo.getColorCriticalBold() + val;
         return             holo.getColorCriticalBold() + fmt;
     }
 }

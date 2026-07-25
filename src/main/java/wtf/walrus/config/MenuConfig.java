@@ -24,7 +24,15 @@ public class MenuConfig {
 
     public void load() {
         if (!configFile.exists()) {
-            plugin.saveResource("menu.yml", false);
+            try {
+                plugin.saveResource("menu.yml", false);
+            } catch (Exception ex) {
+                try {
+                    configFile.createNewFile();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
         config = YamlConfiguration.loadConfiguration(configFile);
     }

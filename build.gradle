@@ -40,6 +40,9 @@ repositories {
         name = "opencollab-releases"
         url = "https://repo.opencollab.dev/maven-releases/"
     }
+    maven {
+        url = 'https://repo.extendedclip.com/releases/'
+    }
 }
 
 dependencies {
@@ -62,6 +65,7 @@ dependencies {
     testImplementation 'com.github.seeseemelk:MockBukkit-v1.16:1.5.2'
 
     implementation 'org.java-websocket:Java-WebSocket:1.5.6'
+    compileOnly 'me.clip:placeholderapi:2.11.6'
 }
 
 dependencies {

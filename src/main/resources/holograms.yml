@@ -11,7 +11,7 @@ nametags:
   #  в таком случае бывает что голограмма слишком высоко.
   #
   versioned-offset: false
-  sync-alerts: false
+  sync-alerts: true
 
   format: "&8{LAST_HISTORY}{NL}&fAVG: {LAST_AVG_COLORED} &f(&#85AEDB{LAST}&f)"
   height_offset: 2.3

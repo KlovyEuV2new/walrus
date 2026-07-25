@@ -1,5 +1,5 @@
 package wtf.walrus.data;
 
 public enum DataType {
-    AIM, BLOCK
+    AIM, BLOCK, ALL
 }
