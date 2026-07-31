@@ -37,6 +37,7 @@ import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.util.FastMath;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -626,7 +627,11 @@ public class NametagManager extends PacketListenerAbstract implements Listener {
 
     public static String getColorInfoFull(double val, int decimalPlaces) {
         HologramConfig holo = Main.instance.getHologramConfig();
-        String fmt = FastMath.format(val, decimalPlaces);
+        String fmt;
+        if (decimalPlaces > 0) fmt = FastMath.format(val, decimalPlaces);
+        else fmt = BigDecimal.valueOf(val)
+                .stripTrailingZeros()
+                .toPlainString();
         if (val < 0.5) return holo.getColorLow()       + fmt;
         if (val < 0.6) return holo.getColorMedium()    + fmt;
         if (val < 0.8) return holo.getColorHigh()      + fmt;

@@ -86,6 +86,7 @@ public class MessagesConfig {
         String bufferValue = String.format("%.1f", buffer);
         String vlValue = String.valueOf(vl);
         String pcf = NametagManager.getColorInfoFull(probability);
+        String fully = NametagManager.getColorInfoFull(probability, 0);
         return msg
                 .replace("{PLAYER}", playerValue)
                 .replace("{PROBABILITY}", probValue)
@@ -100,7 +101,9 @@ public class MessagesConfig {
                 .replace("<probability_colored>", prob_colored)
                 .replace("<probability_full_colored>", pcf)
                 .replace("<buffer>", bufferValue)
-                .replace("<vl>", vlValue);
+                .replace("<vl>", vlValue)
+                .replace("{PROBABILITY_FULLY_COLORED}", fully)
+                .replace("<probability_fully_colored>", fully);
     }
 
     public String getMessage(String key, String player, double probability, String prob_colored, double mineProbability, String mineProb_colored, double buffer, double mineBuffer, int vl) {
@@ -113,6 +116,7 @@ public class MessagesConfig {
         String vlValue = String.valueOf(vl);
         String pcf = NametagManager.getColorInfoFull(probability);
         String mpcf = NametagManager.getColorInfoFull(mineProbability);
+        String fully = NametagManager.getColorInfoFull(probability, 0);
         return msg
                 .replace("{PLAYER}", playerValue)
                 .replace("{PROBABILITY}", probValue)
@@ -137,7 +141,9 @@ public class MessagesConfig {
                 .replace("<mine_probability_full_colored>", mpcf)
                 .replace("<buffer>", bufferValue)
                 .replace("<mine_buffer>", mineBufferValue)
-                .replace("<vl>", vlValue);
+                .replace("<vl>", vlValue)
+                .replace("{PROBABILITY_FULLY_COLORED}", fully)
+                .replace("<probability_fully_colored>", fully);
     }
 
     public String getMessage(String key, String... replacements) {
