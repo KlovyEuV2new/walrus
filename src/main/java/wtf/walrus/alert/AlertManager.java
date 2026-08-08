@@ -115,8 +115,14 @@ public class AlertManager {
     }
 
     public void sendAlert(String suspectName, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType, AIResponse best) {
+        sendAlert(suspectName, null, probability, buffer, modelName, bestNames, checkType, best);
+    }
+
+    public void sendAlert(String suspectName, UUID playerUUID, double probability, double buffer, String modelName, String[] bestNames, CheckType checkType, AIResponse best) {
         String message = ColorUtil.colorize(formatAlertMessage(suspectName, probability, buffer, modelName, bestNames, checkType)
                 .replace("{BEST_PROBABILITY}", best != null ? NametagManager.getColorInfo(best.getProbability()) : NametagManager.getColorInfo(probability))
+                .replace("*{SERVER}", playerUUID != null ? Main.instance.getMessagesConfig().getMessage("server-info") : "")
+                .replace("{SERVER}", playerUUID != null ? Main.instance.getVerdictManager().getServer(playerUUID) : "")
                 .replace("{BEST_PROBABILITY_FULL}", best != null ? NametagManager.getColorInfoFull(best.getProbability()) : NametagManager.getColorInfoFull(probability))
                 .replace("{BEST_MODEL}", best != null ? config.getModelDisplayName(best.getModel()) : config.getModelDisplayName(modelName)));
 
@@ -146,9 +152,15 @@ public class AlertManager {
     }
 
     public void sendAlert(String suspectName, double probability, double buffer, int vl, String modelName, String[] bestNames, CheckType checkType, AIResponse best) {
+        sendAlert(suspectName, null, probability, buffer, vl, modelName, bestNames, checkType, best);
+    }
+
+    public void sendAlert(String suspectName, UUID playerUUID, double probability, double buffer, int vl, String modelName, String[] bestNames, CheckType checkType, AIResponse best) {
         String message = ColorUtil.colorize(formatAlertMessage(suspectName, probability, buffer, vl, modelName, bestNames, checkType)
                 .replace("{BEST_PROBABILITY}", best != null ? NametagManager.getColorInfo(best.getProbability()) : NametagManager.getColorInfo(probability))
                 .replace("{BEST_PROBABILITY_FULL}", best != null ? NametagManager.getColorInfoFull(best.getProbability()) : NametagManager.getColorInfoFull(probability))
+                .replace("*{SERVER}", playerUUID != null ? Main.instance.getMessagesConfig().getMessage("server-info") : "")
+                .replace("{SERVER}", playerUUID != null ? Main.instance.getVerdictManager().getServer(playerUUID) : "")
                 .replace("{BEST_MODEL}", best != null ? config.getModelDisplayName(best.getModel()) : config.getModelDisplayName(modelName)));
 
         scheduler.runSync(() -> {

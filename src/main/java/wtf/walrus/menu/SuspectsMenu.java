@@ -5,9 +5,8 @@
 
 package wtf.walrus.menu;
 
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.Material;
+import com.destroystokyo.paper.profile.PlayerProfile;
+import org.bukkit.*;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -19,8 +18,11 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.Nullable;
+import wtf.walrus.Permissions;
 import wtf.walrus.checks.CheckType;
 import wtf.walrus.checks.impl.ai.AICheck;
 import wtf.walrus.checks.impl.ai.MiningCheck;
@@ -29,6 +31,7 @@ import wtf.walrus.config.HologramConfig;
 import wtf.walrus.data.AIPlayerData;
 import wtf.walrus.data.MiningPlayerData;
 import wtf.walrus.ml.managers.VerdictManager;
+import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.server.AnalyticsClient;
 import wtf.walrus.util.ColorUtil;
 import wtf.walrus.Main;
@@ -40,6 +43,9 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static wtf.walrus.hologram.NametagManager.getColorInfo;
 
 public class SuspectsMenu implements Listener {
 
@@ -87,7 +93,7 @@ public class SuspectsMenu implements Listener {
 
     private static final MenuConfig menuConfig = new MenuConfig();
 
-    private final JavaPlugin plugin;
+    private final Main plugin;
     private final Player admin;
     private final Inventory inventory;
     private final AICheck aiCheck;
@@ -102,15 +108,14 @@ public class SuspectsMenu implements Listener {
         menuConfig.reload(plugin);
     }
 
-    public SuspectsMenu(JavaPlugin plugin, Player admin) {
+    public SuspectsMenu(Main plugin, Player admin) {
         this.plugin = plugin;
         this.admin = admin;
-        Main main = (Main) plugin;
-        this.aiCheck = main.getAiCheck();
-        this.miningCheck = main.getMiningCheck();
-        this.analyticsClient = main.getAnalyticsClient();
-        this.pluginConfig = main.getPluginConfig();
-        menuConfig.reload(main);
+        this.aiCheck = ((Main) plugin).getAiCheck();
+        this.miningCheck = ((Main) plugin).getMiningCheck();
+        this.analyticsClient = ((Main) plugin).getAnalyticsClient();
+        this.pluginConfig = ((Main) plugin).getPluginConfig();
+        menuConfig.reload((Main) plugin);
         this.inventory = Bukkit.createInventory(null, 54, ColorUtil.colorize(menuConfig.title));
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
@@ -123,30 +128,81 @@ public class SuspectsMenu implements Listener {
 
     private void buildAndApply(boolean full) {
         SchedulerManager.getAdapter().runAsync(() -> {
-            List<Player> onlinePlayers = new ArrayList<>(Bukkit.getOnlinePlayers());
+            List<SuspectData> suspectDataList = Stream.concat(
+                            aiCheck.getAllPlayerData().keySet().stream(),
+                            miningCheck.getAllPlayerData().keySet().stream()
+                    )
+                    .distinct()
+                    .map(uuid -> {
+                        AIPlayerData combatData = aiCheck.getAllPlayerData().get(uuid);
+                        MiningPlayerData miningData = miningCheck.getAllPlayerData().get(uuid);
 
-            List<SuspectData> suspectDataList = onlinePlayers.stream()
-                    .map(p -> {
-                        AIPlayerData combatData = aiCheck.getOrCreatePlayerData(p);
-                        MiningPlayerData miningData = miningCheck.getOrCreatePlayerData(p);
+                        CheckType lastVerdict = plugin.getVerdictManager().getLastVerdict(uuid);
 
-                        if ((combatData == null || combatData.getProbabilityHistory().isEmpty()) &&
-                                (miningData == null || miningData.getProbabilityHistory().isEmpty())) return null;
+                        OfflinePlayer p = Bukkit.getOfflinePlayer(uuid);
 
-                        return new SuspectData(
-                                p.getUniqueId(),
-                                p.getName(),
-                                combatData != null ? combatData.getAverageProbability() : 0.0,
-                                combatData != null ? new ArrayList<>(combatData.getProbabilityHistory()) : new ArrayList<>(),
-                                combatData != null ? combatData.getLastAttackTime() : 0L,
-                                miningData != null ? miningData.getAverageProbability() : 0.0,
-                                miningData != null ? new ArrayList<>(miningData.getProbabilityHistory()) : new ArrayList<>(),
-                                miningData != null ? miningData.getLastAttackTime() : 0L
-                        );
+                        if (lastVerdict == CheckType.BLOCK) {
+
+                            if (miningData == null || miningData.getProbabilityHistory().isEmpty()) {
+                                return null;
+                            }
+
+                            return new SuspectData(
+                                    uuid,
+                                    p.getName(),
+
+                                    0.0,
+                                    new ArrayList<>(),
+                                    0L,
+
+                                    miningData.getAverageProbability(),
+                                    new ArrayList<>(miningData.getProbabilityHistory()),
+                                    miningData.getLastAttackTime()
+                            );
+
+                        } else {
+
+                            if (combatData == null || combatData.getProbabilityHistory().isEmpty()) {
+                                return null;
+                            }
+
+                            return new SuspectData(
+                                    uuid,
+                                    p.getName(),
+
+                                    combatData.getAverageProbability(),
+                                    new ArrayList<>(combatData.getProbabilityHistory()),
+                                    combatData.getLastAttackTime(),
+
+                                    0.0,
+                                    new ArrayList<>(),
+                                    0L
+                            );
+                        }
                     })
-                    .filter(Objects::nonNull)
-                    .sorted((d1, d2) -> Double.compare(Math.max(d2.avgProbability, d2.mineAvg), Math.max(d1.avgProbability, d1.mineAvg)))
-                    .collect(Collectors.toList());
+                    .filter(k -> k != null && (!plugin.getVerdictManager().isQuit(k.uuid)))
+                    .sorted((d1, d2) -> {
+                        CheckType v1 = plugin.getVerdictManager().getLastVerdict(d1.uuid);
+                        CheckType v2 = plugin.getVerdictManager().getLastVerdict(d2.uuid);
+
+                        double p1;
+                        double p2;
+
+                        if (v1 == CheckType.BLOCK) {
+                            p1 = d1.mineAvg;
+                        } else {
+                            p1 = d1.avgProbability;
+                        }
+
+                        if (v2 == CheckType.BLOCK) {
+                            p2 = d2.mineAvg;
+                        } else {
+                            p2 = d2.avgProbability;
+                        }
+
+                        return Double.compare(p2, p1);
+                    })
+                    .toList();
 
             final int totalPages = (int) Math.ceil((double) suspectDataList.size() / ITEMS_PER_PAGE);
             if (page >= totalPages && totalPages > 0) page = totalPages - 1;
@@ -238,6 +294,33 @@ public class SuspectsMenu implements Listener {
         }
     }
 
+    private UUID getSuspectUUID(ItemStack item) {
+        if (item == null || !(item.getItemMeta() instanceof SkullMeta meta)) {
+            return null;
+        }
+
+        String uuid = meta.getPersistentDataContainer()
+                .get(new NamespacedKey(plugin, "suspect_uuid"), PersistentDataType.STRING);
+
+        if (uuid == null) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(uuid);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private void setSuspectUUID(SkullMeta meta, UUID uuid) {
+        meta.getPersistentDataContainer().set(
+                new NamespacedKey(plugin, "suspect_uuid"),
+                PersistentDataType.STRING,
+                uuid.toString()
+        );
+    }
+
     private ItemStack createSuspectHeadFromData(SuspectData data) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
@@ -292,6 +375,7 @@ public class SuspectsMenu implements Listener {
                 String detectionsStr = data.analyticsFound ? pluginConfig.getDetectionColor(data.analyticsDetections) + data.analyticsDetections : "&7N/A";
 
                 String processed = line
+                        .replace("{SERVER}", verdictManager.getServer(data.uuid))
                         .replace("{LAST}", lastType.name())
                         .replace("{AVG_PROB}", getColorInfo(data.avgProbability))
                         .replace("{HISTORY}", historyStr.toString().trim())
@@ -316,6 +400,7 @@ public class SuspectsMenu implements Listener {
                 }
                 lore.add(ColorUtil.colorize(processed));
             }
+            setSuspectUUID(meta, data.uuid);
             meta.setLore(lore);
             head.setItemMeta(meta);
         }
@@ -330,16 +415,6 @@ public class SuspectsMenu implements Listener {
             item.setItemMeta(meta);
         }
         return item;
-    }
-
-    private String getColorInfo(double val) {
-        HologramConfig holo = ((Main) plugin).getHologramConfig();
-        String fmt = String.format("%.4f", val);
-        if (val < 0.5) return holo.getColorLow() + fmt;
-        if (val < 0.6) return holo.getColorMedium() + fmt;
-        if (val < 0.8) return holo.getColorHigh() + fmt;
-        if (val < 0.9) return holo.getColorCritical() + fmt;
-        return holo.getColorCriticalBold() + fmt;
     }
 
     @EventHandler
@@ -361,13 +436,29 @@ public class SuspectsMenu implements Listener {
         }
 
         if (item.getItemMeta() instanceof SkullMeta meta) {
-            Player target = meta.getOwningPlayer() != null ? meta.getOwningPlayer().getPlayer() : null;
-            if (target != null && target.isOnline()) {
-                if (event.isLeftClick()) admin.teleport(target);
-                else if (event.isRightClick()) {
-                    admin.setGameMode(GameMode.SPECTATOR);
-                    admin.teleport(target);
+            try {
+                UUID uuid = getSuspectUUID(item);
+                if (uuid == null) return;
+
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null && player.isOnline()) {
+                    if (player.equals(admin)) return;
+
+                    if (event.isLeftClick()) admin.teleport(player);
+                    else if (event.isRightClick()) {
+                        admin.setGameMode(GameMode.SPECTATOR);
+                        admin.teleport(player);
+                    }
+                    return;
                 }
+
+                String server = plugin.getVerdictManager().getServer(uuid);
+                if (server.equals(Main.instance.getPluginConfig().getServerName())) return;
+
+                Main.instance.getAiClientProvider().get().sendTeleport(admin, uuid);
+                Main.instance.getProxyAdapter().connect(admin, server);
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
         }
     }

@@ -23,6 +23,7 @@ public class Config {
     private final double hitLockThreshold;
     private final int postHitTimeoutTicks;
     private final String outputDirectory;
+    private final String serverName;
 
     // ── AI / Detection ────────────────────────────────────────────────────────
     private final boolean aiEnabled, miningAiEnabled;
@@ -172,9 +173,19 @@ public class Config {
     private final String crossServerMethod;
     private final String serverId;
     private final boolean crossServerAlerts;
+    private final BungeeSettings bungee;
+
+    public BungeeSettings getBungee() {
+        return bungee;
+    }
+
+    public record BungeeSettings(boolean receive, boolean send) {}
 
     // ── Default constructor (no-arg / test) ───────────────────────────────────
     public Config() {
+        this.serverName = "";
+        this.bungee = new BungeeSettings(false, false);
+
         this.debug = DEFAULT_DEBUG;
         this.preHitTicks = PRE_HIT_TICKS;
         this.postHitTicks = POST_HIT_TICKS;
@@ -261,6 +272,12 @@ public class Config {
     public Config(JavaPlugin plugin, Logger logger) {
         plugin.saveDefaultConfig();
         FileConfiguration config = plugin.getConfig();
+
+        this.serverName = config.getString("info.name", "");
+        this.bungee = new BungeeSettings(
+                config.getBoolean("info.bungee.receive", false),
+                config.getBoolean("info.bungee.send", false)
+        );
 
         this.debug = config.getBoolean("debug", DEFAULT_DEBUG);
         this.preHitTicks = PRE_HIT_TICKS;
@@ -609,4 +626,8 @@ public class Config {
     public String getCrossServerMethod() { return crossServerMethod; }
     public String getServerId() { return serverId; }
     public boolean isCrossServerAlerts() { return crossServerAlerts; }
+
+    public String getServerName() {
+        return serverName;
+    }
 }

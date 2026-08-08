@@ -43,6 +43,7 @@ import wtf.walrus.server.AIClientProvider;
 import wtf.walrus.server.AIResponse;
 import wtf.walrus.server.FlatBufferSerializer;
 import wtf.walrus.server.IAIClient;
+import wtf.walrus.signalr.SignalRClient;
 import wtf.walrus.violation.ViolationManager;
 import wtf.walrus.util.GeyserUtil;
 
@@ -97,6 +98,10 @@ public class AICheck {
                 plugin.getLogger(),
                 config.isWorldGuardEnabled(),
                 config.getWorldGuardDisabledRegions());
+    }
+
+    public Map<UUID, AIPlayerData> getAllPlayerData() {
+        return playerData;
     }
 
     public void onAttack(Player player, Entity target) {
@@ -351,8 +356,15 @@ public class AICheck {
                 data.resetBuffer(config.getAiBufferResetOnFlag());
             }
 
+            sendAlertToWS(playerName, playerUuid, probability, data.getBuffer(), violationManager.getViolationLevel(playerUuid), modelName);
             plugin.getVerdictManager().setVerdict(playerUuid, CheckType.AIM);
         });
+    }
+
+    private void sendAlertToWS(String playerName, UUID uuid, double probability, double buffer, int vl, String model) {
+        if (isClientAvailable()) {
+            clientProvider.sendAlert(playerName, uuid,  probability, buffer, vl, model, CheckType.AIM);
+        }
     }
 
     private boolean isClientAvailable() {
@@ -382,11 +394,15 @@ public class AICheck {
     }
 
     public AIPlayerData getOrCreatePlayerData(Player player) {
-        return playerData.computeIfAbsent(player.getUniqueId(), uuid -> {
-            AIPlayerData d = new AIPlayerData(uuid, sequence);
-            if (GeyserUtil.isBedrockPlayer(uuid)) {
+        return getOrCreatePlayerData(player.getName(), player.getUniqueId());
+    }
+
+    public AIPlayerData getOrCreatePlayerData(String name, UUID uuid) {
+        return playerData.computeIfAbsent(uuid, key -> {
+            AIPlayerData d = new AIPlayerData(key, sequence);
+            if (GeyserUtil.isBedrockPlayer(key)) {
                 d.setBedrock(true);
-                logger.info("[AI] Bedrock player detected: " + player.getName() + " — bypassing checks");
+                logger.info("[AI] Bedrock player detected: " + name + " — bypassing checks");
             }
             return d;
         });

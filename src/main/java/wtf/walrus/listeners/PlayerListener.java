@@ -23,7 +23,9 @@
 
 package wtf.walrus.listeners;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -44,6 +46,8 @@ import wtf.walrus.server.AnalyticsClient;
 import wtf.walrus.session.SessionManager;
 import wtf.walrus.util.ColorUtil;
 import wtf.walrus.violation.ViolationManager;
+
+import java.util.UUID;
 
 public class PlayerListener implements Listener {
     private final Main plugin;
@@ -143,6 +147,20 @@ public class PlayerListener implements Listener {
                     }
                 });
             }
+        }
+
+        UUID teleport = plugin.getVerdictManager().getTeleport(player.getUniqueId());
+        if (teleport != null) {
+            if (player.hasPermission(Permissions.ALERTS) || player.hasPermission(Permissions.ADMIN)) {
+                Player target = Bukkit.getPlayer(teleport);
+
+                if (target != null && target.isOnline()) {
+                    player.setGameMode(GameMode.SPECTATOR);
+                    player.teleport(target);
+                }
+            }
+
+            plugin.getVerdictManager().removeTeleport(player.getUniqueId());
         }
     }
 

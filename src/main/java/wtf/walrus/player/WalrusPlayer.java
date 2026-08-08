@@ -109,7 +109,15 @@ public class WalrusPlayer {
 
         this.checkManager = new CheckManager(this);
 
+        onJoin();
         players.add(this);
+    }
+
+    public void onJoin() {
+        String serverName = Main.instance.getPluginConfig().getServerName();
+
+        Main.instance.getVerdictManager().quit(uuid, serverName, false);
+        Main.instance.getAiClientProvider().get().sendJoin(user.getName(), user.getUUID());
     }
 
     public void disconnect(Component reason) {
@@ -126,6 +134,11 @@ public class WalrusPlayer {
     }
 
     public void onDisconnect() {
+        String serverName = Main.instance.getPluginConfig().getServerName();
+
+        Main.instance.getVerdictManager().quit(uuid, serverName, true);
+        Main.instance.getAiClientProvider().get().sendQuit(user.getName(), user.getUUID());
+
         players.remove(this);
     }
 

@@ -1,10 +1,6 @@
 package wtf.walrus.data;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import wtf.walrus.Main;
@@ -355,6 +351,22 @@ public class AIPlayerData {
             return q.isEmpty() ? 0.0 : sum / q.size();
         } finally {
             lock.readLock().unlock();
+        }
+    }
+
+    public void updateTime() {
+        this.lastAttackTime = System.currentTimeMillis();
+    }
+
+    public void addHistory(double probability) {
+        this.lastProbability = probability;
+        if (probabilityHistory.size() >= 20) {
+            probabilityHistory.pollFirst();
+        }
+        probabilityHistory.addLast(probability);
+        addInternal(probability);
+        if (probability > 0.8) {
+            highProbabilityDetections++;
         }
     }
 

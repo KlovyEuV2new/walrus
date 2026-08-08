@@ -23,7 +23,13 @@
 
 package wtf.walrus.server;
 
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import wtf.walrus.checks.CheckType;
+
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public interface IAIClient {
@@ -42,4 +48,12 @@ public interface IAIClient {
     String getSessionId();
 
     String getServerAddress();
+
+    void sendAlert(String playerName, UUID uuid, double probability, double buffer, int vl, String model, CheckType type);
+
+    void sendQuit(String name, UUID uuid);
+
+    void sendJoin(String name, UUID uuid);
+
+    void sendTeleport(Player player, UUID uuid);
 }

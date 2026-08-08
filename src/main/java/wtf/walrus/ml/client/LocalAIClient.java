@@ -6,6 +6,10 @@
 package wtf.walrus.ml.client;
 
 import io.reactivex.rxjava3.core.Observable;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import wtf.walrus.checks.CheckType;
 import wtf.walrus.data.TickData;
 import wtf.walrus.ml.FlatBufferDeserializer;
 import wtf.walrus.ml.MLOut;
@@ -101,4 +105,20 @@ public class LocalAIClient implements IAIClient {
     @Override public boolean isLimitExceeded() { return false; }
     @Override public String  getSessionId()    { return "local"; }
     @Override public String  getServerAddress(){ return "local"; }
+
+    @Override
+    public void sendAlert(String playerName, UUID uuid, double probability, double buffer, int vl, String model, CheckType type) {
+    }
+
+    @Override
+    public void sendQuit(String name, UUID uuid) {
+    }
+
+    @Override
+    public void sendJoin(String name, UUID uuid) {
+    }
+
+    @Override
+    public void sendTeleport(Player player, UUID uuid) {
+    }
 }

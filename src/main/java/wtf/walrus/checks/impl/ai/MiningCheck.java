@@ -23,6 +23,7 @@
 
 package wtf.walrus.checks.impl.ai;
 
+import net.royawesome.jlibnoise.module.combiner.Min;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import wtf.walrus.Main;
@@ -322,8 +323,15 @@ public class MiningCheck {
                 data.resetBuffer(config.getAiBufferResetOnFlag());
             }
 
+            sendAlertToWS(playerName, playerUuid, probability, data.getBuffer(), violationManager.getViolationLevel(playerUuid), modelName);
             plugin.getVerdictManager().setVerdict(playerUuid, CheckType.BLOCK);
         });
+    }
+
+    private void sendAlertToWS(String playerName, UUID uuid, double probability, double buffer, int vl, String model) {
+        if (isClientAvailable()) {
+            clientProvider.sendAlert(playerName, uuid,  probability, buffer, vl, model, CheckType.BLOCK);
+        }
     }
 
     private boolean isClientAvailable() {
@@ -353,14 +361,22 @@ public class MiningCheck {
     }
 
     public MiningPlayerData getOrCreatePlayerData(Player player) {
-        return playerData.computeIfAbsent(player.getUniqueId(), uuid -> {
-            MiningPlayerData d = new MiningPlayerData(uuid, sequence);
-            if (GeyserUtil.isBedrockPlayer(uuid)) {
+        return getOrCreatePlayerData(player.getName(), player.getUniqueId());
+    }
+
+    public MiningPlayerData getOrCreatePlayerData(String name, UUID uuid) {
+        return playerData.computeIfAbsent(uuid, key -> {
+            MiningPlayerData d = new MiningPlayerData(key, sequence);
+            if (GeyserUtil.isBedrockPlayer(key)) {
                 d.setBedrock(true);
-                logger.info("[AI] Bedrock player detected: " + player.getName() + " — bypassing checks");
+                logger.info("[AI] Bedrock player detected: " + name + " — bypassing checks");
             }
             return d;
         });
+    }
+
+    public Map<UUID, MiningPlayerData> getAllPlayerData() {
+        return playerData;
     }
 
     private void logTickBuffer(Player player, List<TickData> ticks) {

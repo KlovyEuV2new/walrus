@@ -67,6 +67,22 @@ public class MiningPlayerData {
         this.highProbabilityDetections = 0;
     }
 
+    public void addHistory(double probability) {
+        this.lastProbability = probability;
+        if (probabilityHistory.size() >= 20) {
+            probabilityHistory.pollFirst();
+        }
+        probabilityHistory.addLast(probability);
+        addInternal(probability);
+        if (probability > 0.8) {
+            highProbabilityDetections++;
+        }
+    }
+
+    public void updateTime() {
+        this.lastAttackTime = System.currentTimeMillis();
+    }
+
     public void addLog(TickData tick) {
         if (ticksLog.size() >= Main.instance.getBansManager().config.bdbConfig.getMaxLogSize()) {
             ticksLog.remove(0);

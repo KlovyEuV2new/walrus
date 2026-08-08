@@ -9,10 +9,12 @@ package wtf.walrus.server;
 
 import org.bukkit.Bukkit;
 import wtf.walrus.Main;
+import wtf.walrus.checks.CheckType;
 import wtf.walrus.config.Config;
 import wtf.walrus.ml.client.LocalAIClient;
 import wtf.walrus.signalr.SignalRClient;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
@@ -165,5 +167,9 @@ public class AIClientProvider {
 
     public boolean isLocalMode() {
         return "Local".equals(clientType);
+    }
+
+    public void sendAlert(String playerName, UUID uuid, double probability, double buffer, int vl, String model, CheckType type) {
+        currentClient.sendAlert(playerName, uuid, probability, buffer, vl, model, type);
     }
 }

@@ -13,6 +13,18 @@ debug: false
 # Directory for saving data files (legacy, actual storage is always mls/data/)
 outputDirectory: "data"
 
+info:
+  #
+  # название сервера (вводите из конфига прокси, он используется в функционале меж-серверности)
+  #
+  # При local-mode: true, это особо не нужно (только визуал)
+  #
+  name: "grief-1"
+  bungee: # настройки пакетов ключа (от WebSocket)
+    receive: true
+    send: true
+
+
 # ┌───────────────────────────────────────────────────────────────────────────────┐
 # │                            DETECTION SETTINGS                                 │
 # └───────────────────────────────────────────────────────────────────────────────┘

@@ -38,6 +38,8 @@ import wtf.walrus.ml.managers.VerdictManager;
 import wtf.walrus.npc.NPC;
 import wtf.walrus.placeholderapi.Placeholder;
 import wtf.walrus.player.WalrusPlayer;
+import wtf.walrus.proxy.impl.BungeeAdapter;
+import wtf.walrus.proxy.ProxyAdapter;
 import wtf.walrus.punishment.PunishmentManager;
 import wtf.walrus.rotationloader.RotationSession;
 import wtf.walrus.scheduler.SchedulerManager;
@@ -79,6 +81,8 @@ public final class Main extends JavaPlugin {
     private UpdateChecker updateChecker;
     private AnalyticsClient analyticsClient;
     private VerdictManager verdictManager;
+
+    private ProxyAdapter proxyAdapter;
 
     public MiningCheck getMiningCheck() {
         return miningCheck;
@@ -246,6 +250,7 @@ public final class Main extends JavaPlugin {
         this.checkManagerListener = new CheckManagerListener();
         this.bListener = new PunishListener(this);
         this.bansManager = new BansManager(this);
+        this.proxyAdapter = new BungeeAdapter(this);
 
         for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
             this.tickListener.startPlayerTask(p);
@@ -461,5 +466,9 @@ public final class Main extends JavaPlugin {
 
     public DataConfig getDataConfig() {
         return dataConfig;
+    }
+
+    public ProxyAdapter getProxyAdapter() {
+        return proxyAdapter;
     }
 }

@@ -6,8 +6,21 @@
 package wtf.walrus.signalr;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import wtf.walrus.Main;
+import wtf.walrus.alert.AlertManager;
+import wtf.walrus.checks.CheckType;
+import wtf.walrus.config.Config;
+import wtf.walrus.data.AIPlayerData;
+import wtf.walrus.data.MiningPlayerData;
+import wtf.walrus.menu.SuspectsMenu;
 import wtf.walrus.ml.MLOut;
+import wtf.walrus.ml.managers.VerdictManager;
+import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
 import wtf.walrus.server.AIResponse;
@@ -30,7 +43,7 @@ public class SignalRClient implements IAIClient {
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final long INITIAL_BACKOFF_MS = 1000;
 
-    private final JavaPlugin plugin;
+    private final Main plugin;
     private final String serverAddress;
     private final String apiKey;
     private final int reportStatsIntervalSeconds;
@@ -53,7 +66,7 @@ public class SignalRClient implements IAIClient {
 
     private final String sversion, version;
 
-    public SignalRClient(JavaPlugin plugin, String serverAddress, String apiKey,
+    public SignalRClient(Main plugin, String serverAddress, String apiKey,
                          int reportStatsIntervalSeconds, IntSupplier onlinePlayersSupplier, boolean debug) {
         this.plugin = plugin;
         this.serverAddress = serverAddress;
@@ -85,14 +98,22 @@ public class SignalRClient implements IAIClient {
                     @Override
                     public void onOpen(ServerHandshake handshake) {
                         logger.info("[WebSocket] Connected to " + baseUrl);
+                        Config config = plugin.getPluginConfig();
+
                         Map<String, Object> connectMsg = new HashMap<>();
+
                         connectMsg.put("type", "connect");
                         connectMsg.put("playerCount", onlinePlayersSupplier.getAsInt());
                         connectMsg.put("version", version);
                         connectMsg.put("sversion", sversion);
                         connectMsg.put("apiKey", apiKey);
+
+                        if (!config.getServerName().isEmpty())
+                            connectMsg.put("serverName", config.getServerName());
+                        connectMsg.put("receive", String.valueOf(config.getBungee().receive()));
+                        connectMsg.put("send", String.valueOf(config.getBungee().send()));
+
                         send(gson.toJson(connectMsg));
-                        sendStatsReport();
                     }
 
                     @Override
@@ -158,6 +179,100 @@ public class SignalRClient implements IAIClient {
                 if (future != null) {
                     future.complete(response);
                 }
+            } else if ("alert".equals(status) && response.containsKey("playerName")  && response.containsKey("probability")) {
+                Config config = plugin.getPluginConfig();
+                if (!config.getBungee().receive()) return;
+
+                AlertManager alertManager = plugin.getAlertManager();
+                VerdictManager verdictManager = plugin.getVerdictManager();
+
+                String playerName = (String) response.get("playerName");
+                UUID playerUUID = UUID.fromString((String) response.get("playerUUID"));
+                String serverName = (String) response.get("serverName");
+                double probability = ((Number) response.get("probability")).doubleValue();
+                double buffer = ((Number) response.get("buffer")).doubleValue();
+                int vl = ((Number) response.get("vl")).intValue();
+                String modelId = (String) response.get("model");
+                boolean isOnlyAlert = config.isOnlyAlertForModel(modelId);
+
+                String typeId = (String) response.get("checkType");
+                CheckType type;
+                try {
+                    type = CheckType.valueOf(typeId.toUpperCase());
+                } catch (Exception ex) {
+                    type = CheckType.AIM;
+                }
+
+                if (playerName != null && modelId != null) {
+                    verdictManager.quit(playerUUID, serverName, false);
+                    if (!isOnlyAlert && buffer >= config.getAiBufferFlag()
+                            && probability >= config.getAiPunishmentMinProbability()) {
+                        alertManager.sendAlert(playerName, playerUUID, probability, buffer, vl, modelId, new String[]{}, type, null);
+                    } else {
+                        alertManager.sendAlert(playerName, playerUUID, probability, buffer, modelId, new String[]{}, type, null);
+                    }
+
+                    if (!isOnlyAlert) {
+                        switch (type) {
+                            case AIM -> {
+                                AIPlayerData data = plugin.getAiCheck().getOrCreatePlayerData(playerName, playerUUID);
+                                data.updateBuffer(
+                                        probability,
+                                        config.getAiBufferMultiplier(),
+                                        config.getAiBufferDecrease(),
+                                        config.getAiAlertThreshold());
+                                data.updateTime();
+                                plugin.getVerdictManager().setVerdict(playerUUID, CheckType.AIM);
+                                break;
+                            }
+                            case BLOCK -> {
+                                MiningPlayerData data = plugin.getMiningCheck().getOrCreatePlayerData(playerName, playerUUID);
+                                data.updateBuffer(
+                                        probability,
+                                        config.getAiBufferMultiplier(),
+                                        config.getAiBufferDecrease(),
+                                        config.getAiAlertThreshold());
+                                data.updateTime();
+                                plugin.getVerdictManager().setVerdict(playerUUID, CheckType.BLOCK);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else if ("teleport".equals(status) && response.containsKey("targetUUID")) {
+                if (!plugin.getPluginConfig().getBungee().receive()) return;
+                VerdictManager verdictManager = plugin.getVerdictManager();
+
+                String playerName = (String) response.get("playerName");
+                UUID playerUUID = UUID.fromString((String) response.get("playerUUID"));
+                UUID targetUUID = UUID.fromString((String) response.get("targetUUID"));
+
+                verdictManager.addTeleport(playerUUID, targetUUID);
+            } else if ("quit".equals(status) && response.containsKey("playerName") && response.containsKey("playerUUID")) {
+                if (!plugin.getPluginConfig().getBungee().receive()) return;
+                VerdictManager verdictManager = plugin.getVerdictManager();
+
+                String playerName = (String) response.get("playerName");
+                UUID playerUUID = UUID.fromString((String) response.get("playerUUID"));
+                String serverName = (String) response.get("serverName");
+
+                verdictManager.quit(playerUUID, serverName, true);
+
+                // bungee connect fix ( Фикс бага, bungeecord отправлял сначало join потом quit)
+                WalrusPlayer player = WalrusPlayer.get(playerUUID);
+                if (player != null) {
+                    player.onJoin();
+                }
+            } else if ("join".equals(status) && response.containsKey("playerName") && response.containsKey("playerUUID")) {
+                if (!plugin.getPluginConfig().getBungee().receive()) return;
+                VerdictManager verdictManager = plugin.getVerdictManager();
+
+                String playerName = (String) response.get("playerName");
+                UUID playerUUID = UUID.fromString((String) response.get("playerUUID"));
+                String serverName = (String) response.get("serverName");
+
+                verdictManager.removeTeleport(playerUUID);
+                verdictManager.quit(playerUUID, serverName, false);
             } else if ("error".equals(status)) {
                 String requestId = (String) response.get("requestId");
                 String errorMsg = (String) response.get("message");
@@ -191,6 +306,7 @@ public class SignalRClient implements IAIClient {
             msg.put("version", version);
             msg.put("sversion", sversion);
             msg.put("requestId", UUID.randomUUID().toString());
+            msg.put("serverName", plugin.getPluginConfig().getServerName());
 
             webSocket.send(gson.toJson(msg));
         });
@@ -228,6 +344,70 @@ public class SignalRClient implements IAIClient {
 
             webSocket.send(gson.toJson(heartbeat));
         }, 20L, 20L);
+    }
+
+    public void sendAlert(String playerName, UUID uuid, double probability, double buffer, int vl, String model, CheckType type) {
+        SchedulerManager.getAdapter().runAsync(() -> {
+            if (!connected || shuttingDown || webSocket == null
+                    || !plugin.getPluginConfig().getBungee().send()) return;
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", "alert");
+            msg.put("playerName", playerName);
+            msg.put("playerUUID", uuid.toString());
+            msg.put("probability", probability);
+            msg.put("buffer", buffer);
+            msg.put("vl", vl);
+            msg.put("model", model);
+            msg.put("checkType", type.name());
+
+            webSocket.send(gson.toJson(msg));
+        });
+    }
+
+    public void sendQuit(String playerName, UUID uuid) {
+        SchedulerManager.getAdapter().runAsync(() -> {
+            if (!connected || shuttingDown || webSocket == null
+                    || !plugin.getPluginConfig().getBungee().send()) return;
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", "quit");
+            msg.put("playerName", playerName);
+            msg.put("playerUUID", uuid.toString());
+
+            webSocket.send(gson.toJson(msg));
+        });
+    }
+
+    @Override
+    public void sendJoin(String playerName, UUID uuid) {
+        SchedulerManager.getAdapter().runAsync(() -> {
+            if (!connected || shuttingDown || webSocket == null
+                    || !plugin.getPluginConfig().getBungee().send()) return;
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", "join");
+            msg.put("playerName", playerName);
+            msg.put("playerUUID", uuid.toString());
+
+            webSocket.send(gson.toJson(msg));
+        });
+    }
+
+    @Override
+    public void sendTeleport(Player player, UUID uuid) {
+        SchedulerManager.getAdapter().runAsync(() -> {
+            if (!connected || shuttingDown || webSocket == null
+                    || !plugin.getPluginConfig().getBungee().send()) return;
+
+            Map<String, Object> msg = new HashMap<>();
+            msg.put("type", "teleport");
+            msg.put("playerName", player.getName());
+            msg.put("playerUUID", player.getUniqueId().toString());
+            msg.put("targetUUID", uuid.toString());
+
+            webSocket.send(gson.toJson(msg));
+        });
     }
 
     private void scheduleReconnect() {
