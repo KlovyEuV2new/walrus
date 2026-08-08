@@ -26,6 +26,7 @@ public class AIPlayerData {
     private volatile int highProbabilityDetections;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private DamageVerdict damageVerdict;
+
     private final List<TickData> ticksLog;
 
     public List<TickData> getTicksLog() {
