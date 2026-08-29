@@ -43,6 +43,8 @@ repositories {
     maven {
         url = 'https://repo.extendedclip.com/releases/'
     }
+
+    maven { url 'https://repository.jcuda.org/releases' }
 }
 
 dependencies {
@@ -66,6 +68,7 @@ dependencies {
 
     implementation 'org.java-websocket:Java-WebSocket:1.5.6'
     compileOnly 'me.clip:placeholderapi:2.11.6'
+
 }
 
 dependencies {

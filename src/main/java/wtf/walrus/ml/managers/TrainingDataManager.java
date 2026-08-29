@@ -68,10 +68,10 @@ public class TrainingDataManager {
     }
 
     public TrainingResult trainModel(int epochs) {
-        return trainModel(epochs, List.of(model));
+        return trainModel(epochs, List.of(model), 1);
     }
 
-    public TrainingResult trainModel(int epochs, List<Model> models) {
+    public TrainingResult trainModel(int epochs, List<Model> models, int threads) {
         TrainingSet data = loadAll();
         if (data.features.isEmpty())
             return new TrainingResult(false, 0, 0, 0, 0, 0, 0, 0, 0, "No training data found");
@@ -97,20 +97,37 @@ public class TrainingDataManager {
                 trainX.size(), testX.size()));
 
         long start = System.currentTimeMillis();
-        for (Model m : models) m.trainBatch(trainX, trainY, epochs);
+        for (Model m : models) m.trainBatch(trainX, trainY, epochs, threads);
         long elapsed = System.currentTimeMillis() - start;
 
         Model primary = models.get(0);
         double thresh = primary.getOptimalThreshold();
         int tp = 0, tn = 0, fp = 0, fn = 0;
+
+        double cheatSum = 0.0, legitSum = 0.0;
+        int cheatCount = 0, legitCount = 0;
+
         for (int i = 0; i < testX.size(); i++) {
-            double pred  = primary.predictFromFeatures(testX.get(i)) >= thresh ? 1.0 : 0.0;
+            double predProb = primary.predictFromFeatures(testX.get(i));
             double truth = testY.get(i);
-            if      (pred == 1 && truth == 1) tp++;
-            else if (pred == 0 && truth == 0) tn++;
-            else if (pred == 1 && truth == 0) fp++;
-            else                              fn++;
+
+            double predClass = predProb >= thresh ? 1.0 : 0.0;
+            if      (predClass == 1 && truth == 1) tp++;
+            else if (predClass == 0 && truth == 0) tn++;
+            else if (predClass == 1 && truth == 0) fp++;
+            else                                   fn++;
+
+            if (truth == 1.0) {
+                cheatSum += predProb;
+                cheatCount++;
+            } else {
+                legitSum += predProb;
+                legitCount++;
+            }
         }
+
+        double cheatAvg = cheatCount == 0 ? 0 : cheatSum / cheatCount;
+        double legitAvg = legitCount == 0 ? 0 : legitSum / legitCount;
 
         double accuracy  = testX.isEmpty() ? 0 : (double)(tp + tn) / testX.size() * 100;
         double precision = (tp + fp) == 0  ? 0 : (double) tp / (tp + fp);
@@ -122,6 +139,11 @@ public class TrainingDataManager {
                 "[MLSAC] Results — Acc=%.1f%% P=%.2f R=%.2f F1=%.2f AUC=%.3f | "
                         + "TP=%d TN=%d FP=%d FN=%d | threshold=%.2f | time=%dms",
                 accuracy, precision, recall, f1, auc, tp, tn, fp, fn, thresh, elapsed));
+
+        logger.info(String.format(
+                "[MLSAC] Class averages — CHEAT: %.4f (%.2f%%) | LEGIT: %.4f (%.2f%%) | Separation: %.2fx",
+                cheatAvg, cheatAvg * 100, legitAvg, legitAvg * 100,
+                legitAvg == 0 ? 0 : cheatAvg / legitAvg));
 
         return new TrainingResult(true, trainX.size() + testX.size(), testX.size(),
                 accuracy, precision, recall, f1, auc, elapsed, null);

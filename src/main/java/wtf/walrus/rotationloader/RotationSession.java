@@ -37,6 +37,7 @@ public class RotationSession {
     private final List<TickData> ticks;
     private final boolean crits;
     private final boolean follow;
+    private final boolean silent;
     private final String npcName;
     private NPC current = null;
     private BukkitRunnable currentTask = null;
@@ -62,7 +63,8 @@ public class RotationSession {
         this.ticks = ticks;
         this.crits = crits;
         this.follow = false;
-        this.npcName = generateNPCName();
+        this.silent = false;
+        this.npcName = name;
     }
 
     public RotationSession(String name, String fileName, UUID uuid, int entityId, List<TickData> ticks, boolean crits, boolean follow) {
@@ -73,7 +75,8 @@ public class RotationSession {
         this.ticks = ticks;
         this.crits = crits;
         this.follow = follow;
-        this.npcName = generateNPCName();
+        this.silent = false;
+        this.npcName = name;
     }
 
     public RotationSession(String name, String fileName, UUID uuid, int entityId, List<TickData> ticks, boolean crits, Set<String> modelIds) {
@@ -84,12 +87,20 @@ public class RotationSession {
         this.ticks = ticks;
         this.crits = crits;
         this.follow = false;
-        this.npcName = generateNPCName();
+        this.silent = false;
+        this.npcName = name;
     }
 
-    private String generateNPCName() {
-        int randomNum = 1000 + RANDOM.nextInt(9000);
-        return "игрок_" + randomNum;
+    public RotationSession(String name, String fileName, UUID uuid, int entityId, List<TickData> ticks, boolean crits, boolean follow, boolean silent) {
+        this.name = name;
+        this.fileName = fileName;
+        this.uuid = uuid;
+        this.entityId = entityId;
+        this.ticks = ticks;
+        this.crits = crits;
+        this.follow = follow;
+        this.silent = silent;
+        this.npcName = name;
     }
 
     private void stopInternal(@Nullable User user) {
@@ -233,10 +244,12 @@ public class RotationSession {
                     }
                 }
 
-                npc.rotate(user, tick.deltaYaw, tick.deltaPitch);
+                if (!silent) {
+                    npc.rotate(user, tick.deltaYaw, tick.deltaPitch);
+                }
                 rotationCount++;
 
-                if (crits) {
+                if (crits && !silent) {
                     if (critPhase >= 0) {
                         double yOffset = CRIT_Y_OFFSETS[critPhase];
                         Location base = currentLocation[0];
@@ -257,56 +270,115 @@ public class RotationSession {
                 }
 
                 synchronized (rotationBuffer) {
-                    rotationBuffer.add(tick);
+                    if (silent) {
+                        int start = tickIndex[0];
+                        int end = Math.min(start + 40, ticks.size());
+                        List<TickData> toPredict = new ArrayList<>(ticks.subList(start, end));
+                        tickIndex[0] = end - 1;
 
-                    if (rotationCount % 40 == 0) {
-                        List<TickData> toPredict = new ArrayList<>(rotationBuffer);
-                        rotationBuffer.clear();
+                        if (!toPredict.isEmpty()) {
+                            ASYNC_EXECUTOR.submit(() -> {
+                                try {
+                                    AIClientProvider clientProvider = Main.instance.getAiClientProvider();
+                                    IAIClient client = clientProvider.get();
+                                    if (client == null) return;
 
-                        ASYNC_EXECUTOR.submit(() -> {
-                            try {
-                                AIClientProvider clientProvider = Main.instance.getAiClientProvider();
-                                IAIClient client = clientProvider.get();
-                                if (client == null) return;
+                                    if (client instanceof LocalAIClient) {
+                                        var model = Main.instance.getLocalAIClientProvider().getModel();
+                                        if (model == null) return;
 
-                                if (client instanceof LocalAIClient) {
-                                    var model = Main.instance.getLocalAIClientProvider().getModel();
-                                    if (model == null) return;
+                                        var out = model.predict(toPredict);
+                                        if (out == null) return;
 
-                                    var out = model.predict(toPredict);
-                                    if (out == null) return;
+                                        handlePredictionResult(user, out.prob(), "local");
+                                    } else {
+                                        Set<String> models = Main.instance.getPluginConfig().getModelNames().keySet()
+                                                .stream()
+                                                .filter(modelId -> Main.instance.getPluginConfig().isDisabledModel(modelId) || Main.instance.getPluginConfig().isOnlyAlertForModel(modelId))
+                                                .collect(Collectors.toSet());
 
-                                    handlePredictionResult(user, out.prob(), "local");
-                                } else {
-                                    Set<String> models = Main.instance.getPluginConfig().getModelNames().keySet()
-                                            .stream()
-                                            .filter(modelId -> Main.instance.getPluginConfig().isDisabledModel(modelId) || Main.instance.getPluginConfig().isOnlyAlertForModel(modelId))
-                                            .collect(Collectors.toSet());
+                                        if (models.isEmpty()) return;
+                                        byte[] serialized = FlatBufferSerializer.serialize(toPredict);
 
-                                    if (models.isEmpty()) return;
-                                    byte[] serialized = FlatBufferSerializer.serialize(toPredict);
-
-                                    client.predict(serialized, uuid.toString(), npcName, models.stream().toList(), Main.instance.getPluginConfig().getModelsOnlyAlert())
-                                            .subscribe(
-                                                    response -> {
-                                                        synchronized (RotationSession.this) {
-                                                            if (response != null && response.getProbability() >= 0) {
-                                                                handlePredictionResult(user, response.getProbability(), response.getModel());
+                                        client.predict(serialized, uuid.toString(), npcName, models.stream().toList(), Main.instance.getPluginConfig().getModelsOnlyAlert())
+                                                .subscribe(
+                                                        response -> {
+                                                            synchronized (RotationSession.this) {
+                                                                if (response != null && response.getProbability() >= 0) {
+                                                                    handlePredictionResult(user, response.getProbability(), response.getModel());
+                                                                }
+                                                            }
+                                                        },
+                                                        error -> {
+                                                            synchronized (RotationSession.this) {
+                                                                Main.instance.getLogger().warning("[RotationSession] Error: " + error.getMessage());
                                                             }
                                                         }
-                                                    },
-                                                    error -> {
-                                                        synchronized (RotationSession.this) {
-                                                            Main.instance.getLogger().warning("[RotationSession] Error: " + error.getMessage());
-                                                        }
-                                                    }
-                                            );
+                                                );
+                                    }
+                                } catch (Exception e) {
+                                    Main.instance.getLogger().warning("[RotationSession] ML error: " + e.getMessage());
+                                    e.printStackTrace();
                                 }
-                            } catch (Exception e) {
-                                Main.instance.getLogger().warning("[RotationSession] ML error: " + e.getMessage());
-                                e.printStackTrace();
-                            }
-                        });
+                            });
+                        }
+
+                        if (tickIndex[0] + 1 >= ticks.size()) {
+                            stop(user);
+                            cancel();
+                        }
+                    } else {
+                        rotationBuffer.add(tick);
+
+                        if (rotationCount % 40 == 0) {
+                            List<TickData> toPredict = new ArrayList<>(rotationBuffer);
+                            rotationBuffer.clear();
+
+                            ASYNC_EXECUTOR.submit(() -> {
+                                try {
+                                    AIClientProvider clientProvider = Main.instance.getAiClientProvider();
+                                    IAIClient client = clientProvider.get();
+                                    if (client == null) return;
+
+                                    if (client instanceof LocalAIClient) {
+                                        var model = Main.instance.getLocalAIClientProvider().getModel();
+                                        if (model == null) return;
+
+                                        var out = model.predict(toPredict);
+                                        if (out == null) return;
+
+                                        handlePredictionResult(user, out.prob(), "local");
+                                    } else {
+                                        Set<String> models = Main.instance.getPluginConfig().getModelNames().keySet()
+                                                .stream()
+                                                .filter(modelId -> Main.instance.getPluginConfig().isDisabledModel(modelId) || Main.instance.getPluginConfig().isOnlyAlertForModel(modelId))
+                                                .collect(Collectors.toSet());
+
+                                        if (models.isEmpty()) return;
+                                        byte[] serialized = FlatBufferSerializer.serialize(toPredict);
+
+                                        client.predict(serialized, uuid.toString(), npcName, models.stream().toList(), Main.instance.getPluginConfig().getModelsOnlyAlert())
+                                                .subscribe(
+                                                        response -> {
+                                                            synchronized (RotationSession.this) {
+                                                                if (response != null && response.getProbability() >= 0) {
+                                                                    handlePredictionResult(user, response.getProbability(), response.getModel());
+                                                                }
+                                                            }
+                                                        },
+                                                        error -> {
+                                                            synchronized (RotationSession.this) {
+                                                                Main.instance.getLogger().warning("[RotationSession] Error: " + error.getMessage());
+                                                            }
+                                                        }
+                                                );
+                                    }
+                                } catch (Exception e) {
+                                    Main.instance.getLogger().warning("[RotationSession] ML error: " + e.getMessage());
+                                    e.printStackTrace();
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -388,5 +460,6 @@ public class RotationSession {
     public List<TickData> getTicks() { return ticks; }
     public boolean isCrits() { return crits; }
     public boolean isFollow() { return follow; }
+    public boolean isSilent() { return silent; }
     public String getNPCName() { return npcName; }
 }

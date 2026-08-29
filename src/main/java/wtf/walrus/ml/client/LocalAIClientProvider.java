@@ -77,9 +77,9 @@ public class LocalAIClientProvider {
         }
     }
 
-    public String trainAndSave(int epochs) {
+    public String trainAndSave(int epochs, int threads) {
         TrainingDataManager.TrainingResult result =
-                trainingDataManager.trainModel(epochs, models);
+                trainingDataManager.trainModel(epochs, models, threads);
         if (result.success) {
             saveModels();
             return "§aTraining complete! §f" + result;

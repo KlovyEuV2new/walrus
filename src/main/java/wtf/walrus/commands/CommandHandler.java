@@ -18,6 +18,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import wtf.walrus.Main;
 import wtf.walrus.Permissions;
@@ -28,12 +29,16 @@ import wtf.walrus.config.Config;
 import wtf.walrus.config.Label;
 import wtf.walrus.data.*;
 import wtf.walrus.hologram.NametagManager;
+import wtf.walrus.ml.client.LocalAIClient;
 import wtf.walrus.ml.client.LocalAIClientProvider;
 import wtf.walrus.npc.NPC;
 import wtf.walrus.player.WalrusPlayer;
 import wtf.walrus.rotationloader.RotationSession;
 import wtf.walrus.scheduler.ScheduledTask;
 import wtf.walrus.scheduler.SchedulerManager;
+import wtf.walrus.server.AIClientProvider;
+import wtf.walrus.server.FlatBufferSerializer;
+import wtf.walrus.server.IAIClient;
 import wtf.walrus.session.ISessionManager;
 import wtf.walrus.util.ColorUtil;
 import wtf.walrus.util.DatasetUploader;
@@ -45,6 +50,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -85,8 +91,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     private String msg(String key, String... replacements) {
         return ColorUtil.colorize(plugin.getMessagesConfig().getMessage(key, replacements));
     }
-
-    // ── Command router ────────────────────────────────────────────────────────
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -150,7 +154,9 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         boolean crits = Arrays.stream(args)
                 .anyMatch(arg -> arg.equalsIgnoreCase("-c")),
                 follow = Arrays.stream(args)
-                        .anyMatch(arg -> arg.equalsIgnoreCase("-f"));
+                        .anyMatch(arg -> arg.equalsIgnoreCase("-f")),
+                silent = Arrays.stream(args)
+                        .anyMatch(arg -> arg.equalsIgnoreCase("-s"));
 
         String file = args[1];
         if (!sender.hasPermission(Permissions.PLAY_ROTATION) && !sender.hasPermission(Permissions.ADMIN)) {
@@ -180,18 +186,373 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         WalrusPlayer player = WalrusPlayer.get(user.getUUID());
         if (player == null) return false;
 
+        if (file.equals("*")) {
+            playAllRotations(sender, user, player, crits, follow, silent);
+            return true;
+        }
+
         List<TickData> ticks = new ArrayList<>();
         try {
             ticks = Main.instance.getBansManager().loadAndClose(Main.instance, null, file);
         } catch (IOException ignored) {}
 
         if (ticks != null && !ticks.isEmpty()) {
-            RotationSession session = new RotationSession(user.getName(), file, user.getUUID(), ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), ticks, crits, follow);
+            RotationSession session = new RotationSession(user.getName(), file, user.getUUID(), ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), ticks, crits, follow, silent);
             Location location = new Location(player.position.x, player.position.y, player.position.z, player.yaw, player.pitch);
             session.load(user, location);
             return true;
         }
         return true;
+    }
+
+    private void playAllRotations(CommandSender sender, User user, WalrusPlayer player, boolean crits, boolean follow, boolean silent) {
+        File rotationFolder = new File(Main.instance.getDataFolder(), "mls/data");
+        if (!rotationFolder.exists() || !rotationFolder.isDirectory()) {
+            sender.sendMessage(ColorUtil.colorize("&cRotations folder not found!"));
+            return;
+        }
+
+        File[] files = rotationFolder.listFiles((dir, name) -> name.endsWith(".csv"));
+        if (files == null || files.length == 0) {
+            sender.sendMessage(ColorUtil.colorize("&cNo rotation files found!"));
+            return;
+        }
+
+        sender.sendMessage(ColorUtil.colorize("&aFound &e" + files.length + " &arotation files."));
+
+        if (silent) {
+            playAllRotationsSilent(sender, user, player, files, crits, follow);
+        } else {
+            playAllRotationsNormal(sender, user, player, files, 0, crits, follow);
+        }
+    }
+
+    private void playAllRotationsNormal(CommandSender sender, User user, WalrusPlayer player, File[] files, int index, boolean crits, boolean follow) {
+        if (index >= files.length) {
+            sender.sendMessage(ColorUtil.colorize("&aAll rotations completed!"));
+            return;
+        }
+
+        String fileName = files[index].getName();
+        sender.sendMessage(ColorUtil.colorize("&ePlaying rotation &6" + (index + 1) + "/" + files.length + "&e: &f" + fileName));
+
+        List<TickData> ticks = new ArrayList<>();
+        try {
+            ticks = Main.instance.getBansManager().loadAndClose(Main.instance, null, fileName);
+        } catch (IOException ignored) {}
+
+        if (ticks != null && !ticks.isEmpty()) {
+            RotationSession session = new RotationSession(user.getName(), fileName, user.getUUID(), ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), ticks, crits, follow, false);
+            Location location = new Location(player.position.x, player.position.y, player.position.z, player.yaw, player.pitch);
+            session.load(user, location);
+
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    session.stop(user);
+                    if (index + 1 < files.length) {
+                        sender.sendMessage(ColorUtil.colorize("&eWaiting 5 seconds before next rotation..."));
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                playAllRotationsNormal(sender, user, player, files, index + 1, crits, follow);
+                                this.cancel();
+                            }
+                        }.runTaskLater(Main.instance, 20L * 5);
+                    } else {
+                        playAllRotationsNormal(sender, user, player, files, index + 1, crits, follow);
+                    }
+                    this.cancel();
+                }
+            }.runTaskLater(Main.instance, ticks.size() + 20L * 5);
+        } else {
+            sender.sendMessage(ColorUtil.colorize("&cFailed to load &f" + fileName));
+            playAllRotationsNormal(sender, user, player, files, index + 1, crits, follow);
+        }
+    }
+
+    private void playAllRotationsSilent(CommandSender sender, User user, WalrusPlayer player, File[] files, boolean crits, boolean follow) {
+        sender.sendMessage(ColorUtil.colorize("&eSilent mode: processing all files at once..."));
+
+        SchedulerManager.getAdapter().runAsync(() -> {
+            List<FileResult> results = new ArrayList<>();
+
+            for (File file : files) {
+                String fileName = file.getName();
+                List<TickData> ticks = new ArrayList<>();
+                try {
+                    ticks = Main.instance.getBansManager().loadAndClose(Main.instance, null, fileName);
+                } catch (IOException ignored) {}
+
+                if (ticks == null || ticks.isEmpty()) {
+                    SchedulerManager.getAdapter().runSync(() ->
+                            sender.sendMessage(ColorUtil.colorize("&cFailed to load &f" + fileName))
+                    );
+                    continue;
+                }
+
+                final List<TickData> finalTicks = ticks;
+                SchedulerManager.getAdapter().runSync(() ->
+                        sender.sendMessage(ColorUtil.colorize("&7Processing &f" + fileName + " &7(" + finalTicks.size() + " ticks)"))
+                );
+
+                double totalProb = 0;
+                double cheatSum = 0.0, legitSum = 0.0;
+                int predictionsCount = 0;
+                int cheatCount = 0, legitCount = 0;
+                int tp = 0, tn = 0, fp = 0, fn = 0;
+                double threshold = 0.5;
+
+                int batchSize = 40;
+                for (int i = 0; i < ticks.size(); i += batchSize) {
+                    int end = Math.min(i + batchSize, ticks.size());
+                    List<TickData> batch = new ArrayList<>(ticks.subList(i, end));
+
+                    try {
+                        AIClientProvider clientProvider = Main.instance.getAiClientProvider();
+                        IAIClient client = clientProvider.get();
+                        if (client == null) continue;
+
+                        if (client instanceof LocalAIClient) {
+                            var model = Main.instance.getLocalAIClientProvider().getModel();
+                            if (model == null) continue;
+
+                            var out = model.predict(batch);
+                            if (out == null) continue;
+
+                            double truth = getLabelFromFileName(fileName);
+                            double predProb = out.prob();
+                            totalProb += predProb;
+                            predictionsCount++;
+
+                            if (truth == 1.0) {
+                                cheatSum += predProb;
+                                cheatCount++;
+                            } else {
+                                legitSum += predProb;
+                                legitCount++;
+                            }
+
+                            double predClass = predProb >= threshold ? 1.0 : 0.0;
+                            if (predClass == 1 && truth == 1) tp++;
+                            else if (predClass == 0 && truth == 0) tn++;
+                            else if (predClass == 1 && truth == 0) fp++;
+                            else fn++;
+
+                        } else {
+                            Set<String> models = Main.instance.getPluginConfig().getModelNames().keySet()
+                                    .stream()
+                                    .filter(modelId -> Main.instance.getPluginConfig().isDisabledModel(modelId) || Main.instance.getPluginConfig().isOnlyAlertForModel(modelId))
+                                    .collect(Collectors.toSet());
+
+                            if (models.isEmpty()) continue;
+                            byte[] serialized = FlatBufferSerializer.serialize(batch);
+
+                            final double[] prob = {0};
+                            final boolean[] done = {false};
+
+                            client.predict(serialized, user.getUUID().toString(), user.getName(), models.stream().toList(), Main.instance.getPluginConfig().getModelsOnlyAlert())
+                                    .subscribe(
+                                            response -> {
+                                                synchronized (results) {
+                                                    if (response != null && response.getProbability() >= 0) {
+                                                        prob[0] = response.getProbability();
+                                                    }
+                                                    done[0] = true;
+                                                }
+                                            },
+                                            error -> {
+                                                synchronized (results) {
+                                                    done[0] = true;
+                                                    Main.instance.getLogger().warning("[RotationSession] Error: " + error.getMessage());
+                                                }
+                                            }
+                                    );
+
+                            long startTime = System.currentTimeMillis();
+                            while (!done[0] && System.currentTimeMillis() - startTime < 5000) {
+                                try {
+                                    Thread.sleep(50);
+                                } catch (InterruptedException ignored) {}
+                            }
+
+                            if (done[0]) {
+                                double truth = getLabelFromFileName(fileName);
+                                double predProb = prob[0];
+                                totalProb += predProb;
+                                predictionsCount++;
+
+                                if (truth == 1.0) {
+                                    cheatSum += predProb;
+                                    cheatCount++;
+                                } else {
+                                    legitSum += predProb;
+                                    legitCount++;
+                                }
+
+                                double predClass = predProb >= threshold ? 1.0 : 0.0;
+                                if (predClass == 1 && truth == 1) tp++;
+                                else if (predClass == 0 && truth == 0) tn++;
+                                else if (predClass == 1 && truth == 0) fp++;
+                                else fn++;
+                            }
+                        }
+                    } catch (Exception e) {
+                        Main.instance.getLogger().warning("[RotationSession] ML error: " + e.getMessage());
+                    }
+                }
+
+                if (predictionsCount > 0) {
+                    double avgProb = totalProb / predictionsCount;
+                    double cheatAvg = cheatCount == 0 ? 0 : cheatSum / cheatCount;
+                    double legitAvg = legitCount == 0 ? 0 : legitSum / legitCount;
+
+                    results.add(new FileResult(fileName, avgProb, predictionsCount, ticks.size(),
+                            cheatAvg, legitAvg, cheatCount, legitCount, tp, tn, fp, fn));
+
+                    final String fileResult = String.format(
+                            "  &7%s &8-> &bAvg: &f%.6f &8| &cCHEAT: &f%.6f &8| &aLEGIT: &f%.6f &8| &7Samples: &f%d",
+                            fileName, avgProb, cheatAvg, legitAvg, predictionsCount);
+
+                    SchedulerManager.getAdapter().runSync(() ->
+                            sender.sendMessage(ColorUtil.colorize(fileResult))
+                    );
+                }
+            }
+
+            results.sort((a, b) -> Double.compare(b.avgProb, a.avgProb));
+
+            double totalCheatAvg = 0, totalLegitAvg = 0;
+            int totalCheatFiles = 0, totalLegitFiles = 0;
+            int totalCheatSamples = 0, totalLegitSamples = 0;
+            int totalFiles = results.size();
+
+            for (FileResult result : results) {
+                if (result.cheatCount > 0) {
+                    totalCheatAvg += result.cheatAvg;
+                    totalCheatFiles++;
+                    totalCheatSamples += result.cheatCount;
+                }
+                if (result.legitCount > 0) {
+                    totalLegitAvg += result.legitAvg;
+                    totalLegitFiles++;
+                    totalLegitSamples += result.legitCount;
+                }
+            }
+
+            double overallCheatAvg = totalCheatFiles > 0 ? totalCheatAvg / totalCheatFiles : 0;
+            double overallLegitAvg = totalLegitFiles > 0 ? totalLegitAvg / totalLegitFiles : 0;
+
+            int finalTotalCheatFiles = totalCheatFiles;
+            int finalTotalLegitFiles = totalLegitFiles;
+            int finalTotalLegitSamples = totalLegitSamples;
+            int finalTotalCheatSamples = totalCheatSamples;
+            SchedulerManager.getAdapter().runSync(() -> {
+                sender.sendMessage(ColorUtil.colorize("&6&l=== SILENT ROTATION RESULTS ==="));
+                sender.sendMessage(ColorUtil.colorize("&7Total files: &f" + results.size()));
+                sender.sendMessage(ColorUtil.colorize("&7Sorted by average probability (highest first):"));
+                sender.sendMessage(ColorUtil.colorize("&7" + "─".repeat(70)));
+
+                int rank = 1;
+                for (FileResult result : results) {
+                    String color = result.avgProb > 0.8 ? "&c" : result.avgProb > 0.6 ? "&e" : "&a";
+                    String cheatColor = result.cheatAvg > 0.7 ? "&c" : "&e";
+                    String legitColor = result.legitAvg < 0.3 ? "&a" : "&e";
+
+                    sender.sendMessage(ColorUtil.colorize(
+                            "&6#" + rank + " &f" + result.fileName +
+                                    " &8- &bAvg: " + color + String.format("%.6f", result.avgProb) +
+                                    " &8| &cCHEAT: " + cheatColor + String.format("%.6f", result.cheatAvg) +
+                                    " &8| &aLEGIT: " + legitColor + String.format("%.6f", result.legitAvg) +
+                                    " &8| Samples: &f" + result.predictions +
+                                    " &8| Ticks: &f" + result.totalTicks
+                    ));
+
+                    if (rank <= 5) {
+                        double accuracy = result.tp + result.tn > 0 ?
+                                (double)(result.tp + result.tn) / (result.tp + result.tn + result.fp + result.fn) : 0;
+                        double precision = result.tp + result.fp > 0 ?
+                                (double)result.tp / (result.tp + result.fp) : 0;
+                        double recall = result.tp + result.fn > 0 ?
+                                (double)result.tp / (result.tp + result.fn) : 0;
+                        double f1 = precision + recall > 0 ?
+                                2 * (precision * recall) / (precision + recall) : 0;
+
+                        sender.sendMessage(ColorUtil.colorize(
+                                "    &7TP: &a" + result.tp + " &7TN: &a" + result.tn +
+                                        " &7FP: &c" + result.fp + " &7FN: &c" + result.fn +
+                                        " &8| Acc: &f" + String.format("%.3f", accuracy) +
+                                        " &8| F1: &f" + String.format("%.3f", f1)
+                        ));
+                    }
+                    rank++;
+                }
+
+                sender.sendMessage(ColorUtil.colorize("&7" + "─".repeat(70)));
+
+                sender.sendMessage(ColorUtil.colorize("&6&l=== OVERALL STATISTICS ==="));
+                sender.sendMessage(ColorUtil.colorize("&7Total files analyzed: &f" + totalFiles));
+                sender.sendMessage(ColorUtil.colorize("&7Average CHEAT probability: &c" + String.format("%.6f", overallCheatAvg) +
+                        " &8(&f" + finalTotalCheatFiles + " &7files, &f" + finalTotalCheatSamples + " &7samples)"));
+                sender.sendMessage(ColorUtil.colorize("&7Average LEGIT probability: &a" + String.format("%.6f", overallLegitAvg) +
+                        " &8(&f" + finalTotalLegitFiles + " &7files, &f" + finalTotalLegitSamples + " &7samples)"));
+
+                double separation = overallCheatAvg - overallLegitAvg;
+                String sepColor = separation > 0.3 ? "&a" : separation > 0.15 ? "&e" : "&c";
+                sender.sendMessage(ColorUtil.colorize("&7CHEAT-LEGIT separation: " + sepColor + String.format("%.6f", separation)));
+
+                sender.sendMessage(ColorUtil.colorize("&7" + "─".repeat(70)));
+            });
+
+            Main.instance.getLogger().info("[MLSAC] Silent rotation results:");
+            for (FileResult result : results) {
+                Main.instance.getLogger().info(String.format(
+                        "  %s: avg=%.6f cheat=%.6f legit=%.6f (samples=%d, ticks=%d)",
+                        result.fileName, result.avgProb, result.cheatAvg, result.legitAvg,
+                        result.predictions, result.totalTicks
+                ));
+            }
+
+            Main.instance.getLogger().info(String.format(
+                    "[MLSAC] Overall: avg=%.6f cheat=%.6f legit=%.6f",
+                    overallCheatAvg, overallLegitAvg
+            ));
+        });
+    }
+
+    private double getLabelFromFileName(String fileName) {
+        if (fileName.toUpperCase().startsWith("CHEAT")) return 1.0;
+        if (fileName.toUpperCase().startsWith("LEGIT")) return 0.0;
+        return 0.5;
+    }
+
+    private static class FileResult {
+        String fileName;
+        double avgProb;
+        int predictions;
+        int totalTicks;
+        double cheatAvg;
+        double legitAvg;
+        int cheatCount;
+        int legitCount;
+        int tp, tn, fp, fn;
+
+        FileResult(String fileName, double avgProb, int predictions, int totalTicks,
+                   double cheatAvg, double legitAvg, int cheatCount, int legitCount,
+                   int tp, int tn, int fp, int fn) {
+            this.fileName = fileName;
+            this.avgProb = avgProb;
+            this.predictions = predictions;
+            this.totalTicks = totalTicks;
+            this.cheatAvg = cheatAvg;
+            this.legitAvg = legitAvg;
+            this.cheatCount = cheatCount;
+            this.legitCount = legitCount;
+            this.tp = tp;
+            this.tn = tn;
+            this.fp = fp;
+            this.fn = fn;
+        }
     }
 
     private boolean handleStopPlayRot(CommandSender sender, String[] args) {
@@ -210,16 +571,12 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             e.printStackTrace();
         }
 
-        WalrusPlayer player = WalrusPlayer.get(user.getUUID());
-        if (player == null) return false;
+        if (user == null) return false;
 
         RotationSession.stopAll(user);
+        sender.sendMessage(ColorUtil.colorize("&aAll rotation sessions stopped!"));
         return true;
     }
-
-
-
-    // ── /mlsac upload ─────────────────────────────────────────────────────────
 
     private boolean handleUpload(CommandSender sender) {
         if (!sender.hasPermission(Permissions.UPLOAD)) {
@@ -278,8 +635,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ── /mlsac train [epochs] ─────────────────────────────────────────────────
-
     private boolean handleTrain(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN)) {
             sender.sendMessage(getPrefix() + msg("no-permission"));
@@ -293,31 +648,39 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        int epochs = 150;
+        int epochs = 50;
         if (args.length >= 2) {
             try {
                 epochs = Integer.parseInt(args[1]);
                 epochs = Math.max(1, Math.min(epochs, 1000));
             } catch (NumberFormatException e) {
-                sender.sendMessage(getPrefix() + ColorUtil.colorize("&cInvalid epoch count, using 150"));
+                sender.sendMessage(getPrefix() + ColorUtil.colorize("&cInvalid epoch count, using 50"));
             }
         }
 
-        final int finalEpochs = epochs;
+        int threads = 1;
+        if (args.length >= 3) {
+            try {
+                threads = Integer.parseInt(args[2]);
+            } catch (NumberFormatException e) {
+                sender.sendMessage(getPrefix() + ColorUtil.colorize("&cInvalid threads count, using 1"));
+            }
+        }
+
+
+        final int finalEpochs = epochs, finalThreads = threads;
         sender.sendMessage(getPrefix() + ColorUtil.colorize(
                 "&eStarting local model training with &f" + finalEpochs + " &eepochs..."));
         sender.sendMessage(ColorUtil.colorize("&7Training data: " + localProvider.getDataDir().getAbsolutePath()));
 
         SchedulerManager.getAdapter().runAsync(() -> {
-            String result = localProvider.trainAndSave(finalEpochs);
+            String result = localProvider.trainAndSave(finalEpochs, finalThreads);
             SchedulerManager.getAdapter().runSync(() ->
                     sender.sendMessage(getPrefix() + ColorUtil.colorize("&a" + result))
             );
         });
         return true;
     }
-
-    // ── /mlsac localstatus ────────────────────────────────────────────────────
 
     private boolean handleLocalStatus(CommandSender sender) {
         if (!sender.hasPermission(Permissions.ADMIN)) {
@@ -364,8 +727,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage(ColorUtil.colorize("  &f/walrus start <p> LEGIT  &7- Record legit data"));
         return true;
     }
-
-    // ── /mlsac suspects ───────────────────────────────────────────────────────
 
     private boolean handleSuspects(CommandSender sender) {
         if (!(sender instanceof Player)) {
@@ -458,8 +819,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ── /mlsac alerts ─────────────────────────────────────────────────────────
-
     private boolean handleAlerts(CommandSender sender) {
         if (!(sender instanceof Player)) {
             sender.sendMessage(getPrefix() + msg("players-only"));
@@ -473,8 +832,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         alertManager.toggleAlerts(player);
         return true;
     }
-
-    // ── /mlsac prob <player> ──────────────────────────────────────────────────
 
     private boolean handleProb(CommandSender sender, String[] args) {
         if (!(sender instanceof Player)) {
@@ -635,8 +992,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ── /mlsac reload ─────────────────────────────────────────────────────────
-
     private boolean handleReload(CommandSender sender) {
         if (!sender.hasPermission(Permissions.RELOAD) && !sender.hasPermission(Permissions.ADMIN)) {
             sender.sendMessage(getPrefix() + msg("no-permission"));
@@ -647,8 +1002,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage(getPrefix() + msg("config-reloaded"));
         return true;
     }
-
-    // ── /mlsac kicklist ───────────────────────────────────────────────────────
 
     private boolean handleKickList(CommandSender sender) {
         if (!sender.hasPermission(Permissions.ADMIN)) {
@@ -677,8 +1030,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ── /mlsac punish <player> ────────────────────────────────────────────────
-
     private boolean handlePunish(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN)) {
             sender.sendMessage(getPrefix() + msg("no-permission"));
@@ -702,8 +1053,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         }
         return true;
     }
-
-    // ── /mlsac profile <player> ───────────────────────────────────────────────
 
     private boolean handleProfile(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN) && !sender.hasPermission(Permissions.ALERTS)) {
@@ -749,8 +1098,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ── /mlsac datastatus ─────────────────────────────────────────────────────
-
     private boolean handleDataStatus(CommandSender sender) {
         if (!sender.hasPermission(Permissions.ADMIN)) {
             sender.sendMessage(getPrefix() + msg("no-permission"));
@@ -776,8 +1123,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         }
         return true;
     }
-
-    // ── /mlsac start <player> <label> [comment] ───────────────────────────────
 
     private boolean handleStart(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN) && !sender.hasPermission(Permissions.COLLECT)) {
@@ -814,8 +1159,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage(getPrefix() + msg("session-started", "{LABEL}", label.name(), "{COUNT}", "1"));
         return true;
     }
-
-    // ── /mlsac stop <player|all> ──────────────────────────────────────────────
 
     private boolean handleStop(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN) && !sender.hasPermission(Permissions.COLLECT)) {
@@ -868,7 +1211,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage(getPrefix() + msg("session-stopped", "{PLAYER}", player.getName()));
             return true;
         }
-        // Try offline lookup
         for (DataSession session : sessionManager.getActiveSessions()) {
             if (session.getPlayerName().equalsIgnoreCase(playerName)) {
                 sender.sendMessage(getPrefix() +
@@ -891,7 +1233,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage(getPrefix() + msg("session-stopped", "{PLAYER}", player.getName()));
             return true;
         }
-        // Try offline lookup
         for (DataSession session : sessionManager.getActiveSessions()) {
             if (session.getPlayerName().equalsIgnoreCase(playerName)) {
                 sender.sendMessage(getPrefix() +
@@ -902,8 +1243,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage(getPrefix() + msg("player-not-found", "{PLAYER}", playerName));
         return true;
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private String parseComment(String[] args, int startIndex) {
         if (startIndex >= args.length) return "";
@@ -937,8 +1276,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage(ColorUtil.colorize("&7  /walrus localstatus       &8- Show local ML status"));
         sender.sendMessage(ColorUtil.colorize("&7  /walrus upload             &8- Upload dataset to workupload.com"));
     }
-
-    // ── Tab completion ────────────────────────────────────────────────────────
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {

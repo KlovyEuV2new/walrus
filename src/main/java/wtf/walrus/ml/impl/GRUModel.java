@@ -6,6 +6,9 @@ import wtf.walrus.ml.Model;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ForkJoinPool;
+import java.util.stream.IntStream;
 
 public class GRUModel extends Model {
 
@@ -22,7 +25,7 @@ public class GRUModel extends Model {
         IN = new GRUModel(null).extractFeaturesInternal(probe).size();
     }
 
-    private final int BATCH_SIZE = 128;
+    private static final int BATCH_SIZE = 128;
 
     private static final double LR       = 0.0001;
     private static final double BETA1    = 0.9;
@@ -182,7 +185,7 @@ public class GRUModel extends Model {
     }
 
     @Override
-    public void trainBatch(List<double[]> featuresList, List<Double> labels, int epochs) {
+    public void trainBatch(List<double[]> featuresList, List<Double> labels, int epochs, int threads) {
         if (featuresList.isEmpty()) return;
 
         if (!normReady) fitNormaliser(featuresList);
@@ -209,193 +212,217 @@ public class GRUModel extends Model {
         int    noImprovCount = 0;
         int    bestEpoch     = 0;
 
-        for (int epoch = 0; epoch < epochs; epoch++) {
-            shuffleArray(idxArr, rnd);
+        Thread trainingOwner = Thread.currentThread();
+        int trainingThreads = trainingThreadCount(threads);
+        if (logger != null)
+            logger.info("using cpu threads (" + trainingThreads + ")");
+        ForkJoinPool trainingPool = new ForkJoinPool(trainingThreads);
+        try {
+            for (int epoch = 0; epoch < epochs; epoch++) {
+                shuffleArray(idxArr, rnd);
 
-            for (int batchStart = 0; batchStart < trainFeatures.size(); batchStart += BATCH_SIZE) {
-                int batchEnd  = Math.min(batchStart + BATCH_SIZE, trainFeatures.size());
-                int batchSize = batchEnd - batchStart;
+                for (int batchStart = 0; batchStart < trainFeatures.size(); batchStart += BATCH_SIZE) {
+                    int batchEnd  = Math.min(batchStart + BATCH_SIZE, trainFeatures.size());
+                    int batchSize = batchEnd - batchStart;
 
-                double[][] gGruWrX = new double[TICK_IN][GRU_H]; double[][] gGruWrH = new double[GRU_H][GRU_H]; double[] gGruBr = new double[GRU_H];
-                double[][] gGruWzX = new double[TICK_IN][GRU_H]; double[][] gGruWzH = new double[GRU_H][GRU_H]; double[] gGruBz = new double[GRU_H];
-                double[][] gGruWnX = new double[TICK_IN][GRU_H]; double[][] gGruWnH = new double[GRU_H][GRU_H]; double[] gGruBn = new double[GRU_H];
-                double[]   gWOut   = new double[GRU_H];
-                double[]   gBOut   = new double[1];
+                    Gradient batchGradient = new Gradient();
+                    int parallelStart = batchStart;
+                    int parallelEnd = batchEnd;
+                    int workerCount = Math.min(trainingThreads, batchSize);
+                    int samplesPerWorker = (batchSize + workerCount - 1) / workerCount;
+                    Gradient[] workerGradients = new Gradient[workerCount];
 
-                for (int idxPtr = batchStart; idxPtr < batchEnd; idxPtr++) {
-                    int      idx = idxArr[idxPtr];
-                    double[] raw = trainFeatures.get(idx);
-                    double   y   = trainLabels.get(idx);
+                    trainingPool.submit(() -> IntStream.range(0, workerCount)
+                            .parallel()
+                            .forEach(worker -> {
+                                int workerStart = parallelStart + worker * samplesPerWorker;
+                                int workerEnd = Math.min(workerStart + samplesPerWorker, parallelEnd);
+                                Gradient workerGradient = new Gradient();
+                                workerGradients[worker] = workerGradient;
 
-                    int seqLen = raw.length / TICK_IN;
+                                for (int idxPtr = workerStart; idxPtr < workerEnd; idxPtr++) {
+                                    if (trainingOwner.isInterrupted()) {
+                                        throw new CancellationException("Local model training was cancelled");
+                                    }
 
-                    double[][] hs      = new double[seqLen + 1][GRU_H];
-                    double[][] rsAll   = new double[seqLen][GRU_H];
-                    double[][] zsAll   = new double[seqLen][GRU_H];
-                    double[][] nsAll   = new double[seqLen][GRU_H];
-                    double[][] srAll   = new double[seqLen][GRU_H];
-                    double[][] szAll   = new double[seqLen][GRU_H];
-                    double[][] snAll   = new double[seqLen][GRU_H];
-                    double[][] xs      = new double[seqLen][TICK_IN];
+                                    double[][] gGruWrX = workerGradient.gruWrX; double[][] gGruWrH = workerGradient.gruWrH; double[] gGruBr = workerGradient.gruBr;
+                                    double[][] gGruWzX = workerGradient.gruWzX; double[][] gGruWzH = workerGradient.gruWzH; double[] gGruBz = workerGradient.gruBz;
+                                    double[][] gGruWnX = workerGradient.gruWnX; double[][] gGruWnH = workerGradient.gruWnH; double[] gGruBn = workerGradient.gruBn;
+                                    double[]   gWOut   = workerGradient.wOut;
+                                    double[]   gBOut   = workerGradient.bOut;
 
-                    for (int t = 0; t < seqLen; t++) {
-                        for (int i = 0; i < TICK_IN; i++) xs[t][i] = raw[t * TICK_IN + i];
-                        double[] x     = xs[t];
-                        double[] hPrev = hs[t];
-                        double[] r     = new double[GRU_H];
-                        double[] z     = new double[GRU_H];
-                        double[] n     = new double[GRU_H];
-                        double[] sr    = new double[GRU_H];
-                        double[] sz    = new double[GRU_H];
-                        double[] sn    = new double[GRU_H];
+                                    int      idx = idxArr[idxPtr];
+                                    double[] raw = trainFeatures.get(idx);
+                                    double   y   = trainLabels.get(idx);
 
-                        for (int j = 0; j < GRU_H; j++) {
-                            double vr = gruBr[j];
-                            for (int i = 0; i < TICK_IN; i++) vr += x[i] * gruWrX[i][j];
-                            for (int i = 0; i < GRU_H; i++)  vr += hPrev[i] * gruWrH[i][j];
-                            sr[j] = vr; r[j] = sigmoid(vr);
+                                    int seqLen = raw.length / TICK_IN;
 
-                            double vz = gruBz[j];
-                            for (int i = 0; i < TICK_IN; i++) vz += x[i] * gruWzX[i][j];
-                            for (int i = 0; i < GRU_H; i++)  vz += hPrev[i] * gruWzH[i][j];
-                            sz[j] = vz; z[j] = sigmoid(vz);
-                        }
-                        for (int j = 0; j < GRU_H; j++) {
-                            double vn = gruBn[j];
-                            for (int i = 0; i < TICK_IN; i++) vn += x[i] * gruWnX[i][j];
-                            for (int i = 0; i < GRU_H; i++)  vn += (r[i] * hPrev[i]) * gruWnH[i][j];
-                            sn[j] = vn; n[j] = tanh(vn);
-                            hs[t + 1][j] = (1.0 - z[j]) * n[j] + z[j] * hPrev[j];
-                        }
-                        rsAll[t] = r; zsAll[t] = z; nsAll[t] = n;
-                        srAll[t] = sr; szAll[t] = sz; snAll[t] = sn;
+                                    double[][] hs    = new double[seqLen + 1][GRU_H];
+                                    double[][] rsAll = new double[seqLen][GRU_H];
+                                    double[][] zsAll = new double[seqLen][GRU_H];
+                                    double[][] nsAll = new double[seqLen][GRU_H];
+
+                                    for (int t = 0; t < seqLen; t++) {
+                                        int rawOffset  = t * TICK_IN;
+                                        double[] hPrev = hs[t];
+                                        double[] r     = new double[GRU_H];
+                                        double[] z     = new double[GRU_H];
+                                        double[] n     = new double[GRU_H];
+
+                                        for (int j = 0; j < GRU_H; j++) {
+                                            double vr = gruBr[j];
+                                            for (int i = 0; i < TICK_IN; i++) vr += raw[rawOffset + i] * gruWrX[i][j];
+                                            for (int i = 0; i < GRU_H; i++)  vr += hPrev[i] * gruWrH[i][j];
+                                            r[j] = sigmoid(vr);
+
+                                            double vz = gruBz[j];
+                                            for (int i = 0; i < TICK_IN; i++) vz += raw[rawOffset + i] * gruWzX[i][j];
+                                            for (int i = 0; i < GRU_H; i++)  vz += hPrev[i] * gruWzH[i][j];
+                                            z[j] = sigmoid(vz);
+                                        }
+                                        for (int j = 0; j < GRU_H; j++) {
+                                            double vn = gruBn[j];
+                                            for (int i = 0; i < TICK_IN; i++) vn += raw[rawOffset + i] * gruWnX[i][j];
+                                            for (int i = 0; i < GRU_H; i++)  vn += (r[i] * hPrev[i]) * gruWnH[i][j];
+                                            n[j] = tanh(vn);
+                                            hs[t + 1][j] = (1.0 - z[j]) * n[j] + z[j] * hPrev[j];
+                                        }
+                                        rsAll[t] = r; zsAll[t] = z; nsAll[t] = n;
+                                    }
+
+                                    double[] hLast = hs[seqLen];
+                                    double   logit = bOut;
+                                    for (int i = 0; i < GRU_H; i++) logit += hLast[i] * wOut[i];
+                                    double p    = sigmoid(logit);
+                                    double dOut = p - y;
+
+                                    gBOut[0] += dOut;
+                                    for (int i = 0; i < GRU_H; i++) gWOut[i] += dOut * hLast[i];
+
+                                    double[] dH = new double[GRU_H];
+                                    for (int i = 0; i < GRU_H; i++) dH[i] = dOut * wOut[i];
+
+                                    for (int t = seqLen - 1; t >= 0; t--) {
+                                        double[] hPrev  = hs[t];
+                                        double[] r      = rsAll[t];
+                                        double[] z      = zsAll[t];
+                                        double[] n      = nsAll[t];
+
+                                        double[] dN     = new double[GRU_H];
+                                        double[] dZ     = new double[GRU_H];
+                                        double[] dR     = new double[GRU_H];
+                                        double[] dHPrev = new double[GRU_H];
+
+                                        for (int j = 0; j < GRU_H; j++) {
+                                            dN[j] = dH[j] * (1.0 - z[j]) * (1.0 - n[j] * n[j]);
+                                            dZ[j] = dH[j] * (hPrev[j] - n[j]) * z[j] * (1.0 - z[j]);
+                                            dHPrev[j] += dH[j] * z[j];
+                                        }
+
+                                        for (int j = 0; j < GRU_H; j++) {
+                                            double drj = 0.0;
+                                            for (int k = 0; k < GRU_H; k++) drj += dN[k] * gruWnH[j][k] * hPrev[j];
+                                            dR[j] = drj * r[j] * (1.0 - r[j]);
+                                        }
+
+                                        for (int j = 0; j < GRU_H; j++) {
+                                            gGruBr[j] += dR[j];
+                                            for (int i = 0; i < TICK_IN; i++) gGruWrX[i][j] += dR[j] * raw[t * TICK_IN + i];
+                                            for (int i = 0; i < GRU_H; i++)  gGruWrH[i][j] += dR[j] * hPrev[i];
+
+                                            gGruBz[j] += dZ[j];
+                                            for (int i = 0; i < TICK_IN; i++) gGruWzX[i][j] += dZ[j] * raw[t * TICK_IN + i];
+                                            for (int i = 0; i < GRU_H; i++)  gGruWzH[i][j] += dZ[j] * hPrev[i];
+
+                                            gGruBn[j] += dN[j];
+                                            for (int i = 0; i < TICK_IN; i++) gGruWnX[i][j] += dN[j] * raw[t * TICK_IN + i];
+                                            for (int i = 0; i < GRU_H; i++)  gGruWnH[i][j] += dN[j] * r[i] * hPrev[i];
+                                        }
+
+                                        for (int i = 0; i < GRU_H; i++) {
+                                            for (int j = 0; j < GRU_H; j++) {
+                                                dHPrev[i] += dR[j] * gruWrH[i][j];
+                                                dHPrev[i] += dZ[j] * gruWzH[i][j];
+                                                dHPrev[i] += dN[j] * gruWnH[i][j] * r[j];
+                                            }
+                                        }
+
+                                        dH = dHPrev;
+                                    }
+                                }
+                            })).join();
+
+                    for (Gradient workerGradient : workerGradients) batchGradient.add(workerGradient);
+
+                    double[][] gGruWrX = batchGradient.gruWrX; double[][] gGruWrH = batchGradient.gruWrH; double[] gGruBr = batchGradient.gruBr;
+                    double[][] gGruWzX = batchGradient.gruWzX; double[][] gGruWzH = batchGradient.gruWzH; double[] gGruBz = batchGradient.gruBz;
+                    double[][] gGruWnX = batchGradient.gruWnX; double[][] gGruWnH = batchGradient.gruWnH; double[] gGruBn = batchGradient.gruBn;
+                    double[]   gWOut   = batchGradient.wOut;
+                    double[]   gBOut   = batchGradient.bOut;
+
+                    double inv = 1.0 / batchSize;
+                    gBOut[0] *= inv;
+                    for (int i = 0; i < GRU_H; i++) gWOut[i] *= inv;
+                    for (int i = 0; i < TICK_IN; i++) for (int j = 0; j < GRU_H; j++) { gGruWrX[i][j] *= inv; gGruWzX[i][j] *= inv; gGruWnX[i][j] *= inv; }
+                    for (int i = 0; i < GRU_H; i++)  for (int j = 0; j < GRU_H; j++) { gGruWrH[i][j] *= inv; gGruWzH[i][j] *= inv; gGruWnH[i][j] *= inv; }
+                    for (int j = 0; j < GRU_H; j++) { gGruBr[j] *= inv; gGruBz[j] *= inv; gGruBn[j] *= inv; }
+
+                    adamStep++;
+                    double bc1 = 1.0 - Math.pow(BETA1, adamStep);
+                    double bc2 = 1.0 - Math.pow(BETA2, adamStep);
+
+                    mBOut = BETA1 * mBOut + (1 - BETA1) * gBOut[0];
+                    vBOut = BETA2 * vBOut + (1 - BETA2) * gBOut[0] * gBOut[0];
+                    bOut -= LR * (mBOut / bc1) / (Math.sqrt(vBOut / bc2) + EPS);
+
+                    for (int i = 0; i < GRU_H; i++) {
+                        double gw = gWOut[i] + LAMBDA * wOut[i];
+                        mWOut[i] = BETA1 * mWOut[i] + (1 - BETA1) * gw;
+                        vWOut[i] = BETA2 * vWOut[i] + (1 - BETA2) * gw * gw;
+                        wOut[i] -= LR * (mWOut[i] / bc1) / (Math.sqrt(vWOut[i] / bc2) + EPS);
                     }
 
-                    double[] hLast = hs[seqLen];
-                    double   logit = bOut;
-                    for (int i = 0; i < GRU_H; i++) logit += hLast[i] * wOut[i];
-                    double p    = sigmoid(logit);
-                    double dOut = p - y;
-
-                    gBOut[0] += dOut;
-                    for (int i = 0; i < GRU_H; i++) gWOut[i] += dOut * hLast[i];
-
-                    double[] dH = new double[GRU_H];
-                    for (int i = 0; i < GRU_H; i++) dH[i] = dOut * wOut[i];
-
-                    for (int t = seqLen - 1; t >= 0; t--) {
-                        double[] x      = xs[t];
-                        double[] hPrev  = hs[t];
-                        double[] r      = rsAll[t];
-                        double[] z      = zsAll[t];
-                        double[] n      = nsAll[t];
-                        double[] sr     = srAll[t];
-                        double[] sz     = szAll[t];
-                        double[] sn     = snAll[t];
-
-                        double[] dN     = new double[GRU_H];
-                        double[] dZ     = new double[GRU_H];
-                        double[] dR     = new double[GRU_H];
-                        double[] dHPrev = new double[GRU_H];
-
-                        for (int j = 0; j < GRU_H; j++) {
-                            dN[j] = dH[j] * (1.0 - z[j]) * tanhDeriv(sn[j]);
-                            dZ[j] = dH[j] * (hPrev[j] - n[j]) * sigmoidDeriv(sz[j]);
-                            dHPrev[j] += dH[j] * z[j];
-                        }
-
-                        for (int j = 0; j < GRU_H; j++) {
-                            double drj = 0.0;
-                            for (int k = 0; k < GRU_H; k++) drj += dN[k] * gruWnH[j][k] * hPrev[j];
-                            dR[j] = drj * sigmoidDeriv(sr[j]);
-                        }
-
-                        for (int j = 0; j < GRU_H; j++) {
-                            gGruBr[j] += dR[j];
-                            for (int i = 0; i < TICK_IN; i++) gGruWrX[i][j] += dR[j] * x[i];
-                            for (int i = 0; i < GRU_H; i++)  gGruWrH[i][j] += dR[j] * hPrev[i];
-
-                            gGruBz[j] += dZ[j];
-                            for (int i = 0; i < TICK_IN; i++) gGruWzX[i][j] += dZ[j] * x[i];
-                            for (int i = 0; i < GRU_H; i++)  gGruWzH[i][j] += dZ[j] * hPrev[i];
-
-                            gGruBn[j] += dN[j];
-                            for (int i = 0; i < TICK_IN; i++) gGruWnX[i][j] += dN[j] * x[i];
-                            for (int i = 0; i < GRU_H; i++)  gGruWnH[i][j] += dN[j] * r[i] * hPrev[i];
-                        }
-
-                        for (int i = 0; i < GRU_H; i++) {
-                            for (int j = 0; j < GRU_H; j++) {
-                                dHPrev[i] += dR[j] * gruWrH[i][j];
-                                dHPrev[i] += dZ[j] * gruWzH[i][j];
-                                dHPrev[i] += dN[j] * gruWnH[i][j] * r[j];
-                            }
-                        }
-
-                        dH = dHPrev;
-                    }
+                    adamUpdateMatrix(gGruWrX, gruWrX, mGruWrX, vGruWrX, TICK_IN, GRU_H, bc1, bc2);
+                    adamUpdateMatrix(gGruWrH, gruWrH, mGruWrH, vGruWrH, GRU_H,   GRU_H, bc1, bc2);
+                    adamUpdateVector(gGruBr,  gruBr,  mGruBr,  vGruBr,  GRU_H,           bc1, bc2);
+                    adamUpdateMatrix(gGruWzX, gruWzX, mGruWzX, vGruWzX, TICK_IN, GRU_H, bc1, bc2);
+                    adamUpdateMatrix(gGruWzH, gruWzH, mGruWzH, vGruWzH, GRU_H,   GRU_H, bc1, bc2);
+                    adamUpdateVector(gGruBz,  gruBz,  mGruBz,  vGruBz,  GRU_H,           bc1, bc2);
+                    adamUpdateMatrix(gGruWnX, gruWnX, mGruWnX, vGruWnX, TICK_IN, GRU_H, bc1, bc2);
+                    adamUpdateMatrix(gGruWnH, gruWnH, mGruWnH, vGruWnH, GRU_H,   GRU_H, bc1, bc2);
+                    adamUpdateVector(gGruBn,  gruBn,  mGruBn,  vGruBn,  GRU_H,           bc1, bc2);
                 }
 
-                double inv = 1.0 / batchSize;
-                gBOut[0] *= inv;
-                for (int i = 0; i < GRU_H; i++) gWOut[i] *= inv;
-                for (int i = 0; i < TICK_IN; i++) for (int j = 0; j < GRU_H; j++) { gGruWrX[i][j] *= inv; gGruWzX[i][j] *= inv; gGruWnX[i][j] *= inv; }
-                for (int i = 0; i < GRU_H; i++)  for (int j = 0; j < GRU_H; j++) { gGruWrH[i][j] *= inv; gGruWzH[i][j] *= inv; gGruWnH[i][j] *= inv; }
-                for (int j = 0; j < GRU_H; j++) { gGruBr[j] *= inv; gGruBz[j] *= inv; gGruBn[j] *= inv; }
+                double trainLoss = computeLoss(trainFeatures, trainLabels);
 
-                adamStep++;
-                double bc1 = 1.0 - Math.pow(BETA1, adamStep);
-                double bc2 = 1.0 - Math.pow(BETA2, adamStep);
-
-                mBOut = BETA1 * mBOut + (1 - BETA1) * gBOut[0];
-                vBOut = BETA2 * vBOut + (1 - BETA2) * gBOut[0] * gBOut[0];
-                bOut -= LR * (mBOut / bc1) / (Math.sqrt(vBOut / bc2) + EPS);
-
-                for (int i = 0; i < GRU_H; i++) {
-                    double gw = gWOut[i] + LAMBDA * wOut[i];
-                    mWOut[i] = BETA1 * mWOut[i] + (1 - BETA1) * gw;
-                    vWOut[i] = BETA2 * vWOut[i] + (1 - BETA2) * gw * gw;
-                    wOut[i] -= LR * (mWOut[i] / bc1) / (Math.sqrt(vWOut[i] / bc2) + EPS);
-                }
-
-                adamUpdateMatrix(gGruWrX, gruWrX, mGruWrX, vGruWrX, TICK_IN, GRU_H, bc1, bc2);
-                adamUpdateMatrix(gGruWrH, gruWrH, mGruWrH, vGruWrH, GRU_H,   GRU_H, bc1, bc2);
-                adamUpdateVector(gGruBr,  gruBr,  mGruBr,  vGruBr,  GRU_H,           bc1, bc2);
-                adamUpdateMatrix(gGruWzX, gruWzX, mGruWzX, vGruWzX, TICK_IN, GRU_H, bc1, bc2);
-                adamUpdateMatrix(gGruWzH, gruWzH, mGruWzH, vGruWzH, GRU_H,   GRU_H, bc1, bc2);
-                adamUpdateVector(gGruBz,  gruBz,  mGruBz,  vGruBz,  GRU_H,           bc1, bc2);
-                adamUpdateMatrix(gGruWnX, gruWnX, mGruWnX, vGruWnX, TICK_IN, GRU_H, bc1, bc2);
-                adamUpdateMatrix(gGruWnH, gruWnH, mGruWnH, vGruWnH, GRU_H,   GRU_H, bc1, bc2);
-                adamUpdateVector(gGruBn,  gruBn,  mGruBn,  vGruBn,  GRU_H,           bc1, bc2);
-            }
-
-            double trainLoss = computeLoss(trainFeatures, trainLabels);
-
-            if (!valFeatures.isEmpty()) {
-                double valLoss = computeLoss(valFeatures, valLabels);
-                if (logger != null)
-                    logger.info("[LocalModel] Epoch " + (epoch + 1)
-                            + " trainLoss=" + String.format("%.6f", trainLoss)
-                            + " valLoss=" + String.format("%.6f", valLoss));
-                if (valLoss < bestValLoss - 1e-6) {
-                    bestValLoss   = valLoss;
-                    noImprovCount = 0;
-                    bestEpoch     = epoch + 1;
-                    snapshotWeights(bestGruWrX, bestGruWrH, bestGruBr,
-                            bestGruWzX, bestGruWzH, bestGruBz,
-                            bestGruWnX, bestGruWnH, bestGruBn, bestWOut);
-                    bestBOut = bOut;
-                } else if (++noImprovCount >= PATIENCE) {
+                if (!valFeatures.isEmpty()) {
+                    double valLoss = computeLoss(valFeatures, valLabels);
                     if (logger != null)
-                        logger.info("[LocalModel] Early stopping at epoch " + (epoch + 1)
-                                + ", best epoch=" + bestEpoch);
-                    break;
+                        logger.info("[LocalModel] Epoch " + (epoch + 1)
+                                + " trainLoss=" + String.format("%.6f", trainLoss)
+                                + " valLoss=" + String.format("%.6f", valLoss));
+                    if (valLoss < bestValLoss - 1e-6) {
+                        bestValLoss   = valLoss;
+                        noImprovCount = 0;
+                        bestEpoch     = epoch + 1;
+                        snapshotWeights(bestGruWrX, bestGruWrH, bestGruBr,
+                                bestGruWzX, bestGruWzH, bestGruBz,
+                                bestGruWnX, bestGruWnH, bestGruBn, bestWOut);
+                        bestBOut = bOut;
+                    } else if (++noImprovCount >= PATIENCE) {
+                        if (logger != null)
+                            logger.info("[LocalModel] Early stopping at epoch " + (epoch + 1)
+                                    + ", best epoch=" + bestEpoch);
+                        break;
+                    }
+                } else {
+                    if (logger != null)
+                        logger.info("[LocalModel] Epoch " + (epoch + 1)
+                                + " trainLoss=" + String.format("%.6f", trainLoss));
                 }
-            } else {
-                if (logger != null)
-                    logger.info("[LocalModel] Epoch " + (epoch + 1)
-                            + " trainLoss=" + String.format("%.6f", trainLoss));
             }
+        } finally {
+            trainingPool.shutdownNow();
         }
 
         if (!valFeatures.isEmpty() && bestEpoch > 0) {
@@ -602,6 +629,46 @@ public class GRUModel extends Model {
         }
     }
 
+    private static final class Gradient {
+        final double[][] gruWrX = new double[TICK_IN][GRU_H];
+        final double[][] gruWrH = new double[GRU_H][GRU_H];
+        final double[] gruBr = new double[GRU_H];
+        final double[][] gruWzX = new double[TICK_IN][GRU_H];
+        final double[][] gruWzH = new double[GRU_H][GRU_H];
+        final double[] gruBz = new double[GRU_H];
+        final double[][] gruWnX = new double[TICK_IN][GRU_H];
+        final double[][] gruWnH = new double[GRU_H][GRU_H];
+        final double[] gruBn = new double[GRU_H];
+        final double[] wOut = new double[GRU_H];
+        final double[] bOut = new double[1];
+
+        void add(Gradient other) {
+            addMatrix(gruWrX, other.gruWrX);
+            addMatrix(gruWrH, other.gruWrH);
+            addVector(gruBr, other.gruBr);
+            addMatrix(gruWzX, other.gruWzX);
+            addMatrix(gruWzH, other.gruWzH);
+            addVector(gruBz, other.gruBz);
+            addMatrix(gruWnX, other.gruWnX);
+            addMatrix(gruWnH, other.gruWnH);
+            addVector(gruBn, other.gruBn);
+            addVector(wOut, other.wOut);
+            bOut[0] += other.bOut[0];
+        }
+
+        private static void addMatrix(double[][] target, double[][] source) {
+            for (int row = 0; row < target.length; row++) {
+                addVector(target[row], source[row]);
+            }
+        }
+
+        private static void addVector(double[] target, double[] source) {
+            for (int index = 0; index < target.length; index++) {
+                target[index] += source[index];
+            }
+        }
+    }
+
     private double computeLoss(List<double[]> featuresList, List<Double> labels) {
         double loss = 0.0;
         for (int i = 0; i < featuresList.size(); i++) {
@@ -682,6 +749,11 @@ public class GRUModel extends Model {
         for (int i = arr.length - 1; i > 0; i--) {
             int j = r.nextInt(i + 1); int tmp = arr[j]; arr[j] = arr[i]; arr[i] = tmp;
         }
+    }
+
+    private static int trainingThreadCount(int threads) {
+        int processors = Runtime.getRuntime().availableProcessors();
+        return Math.max(1, Math.min(threads, processors - 1));
     }
 
     private double sigmoid(double x) {
